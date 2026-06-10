@@ -3,9 +3,11 @@ import { CustomerCard } from './components/CustomerCard';
 import { KitchenView } from './components/KitchenView';
 import { StorageView } from './components/StorageView';
 import { RecipeBookModal } from './components/RecipeBookModal';
+import { InstructionModal } from './components/InstructionModal';
 import { CHARACTERS, INGREDIENTS, RECIPES } from './data';
 import { IngredientType, Order, RecipeId, PrepItem } from './types';
-import { Coins, LogOut, BookOpen, Utensils, ChevronDown, ChevronUp, ShoppingBag, Zap, Clock } from 'lucide-react';
+import { Coins, LogOut, BookOpen, Utensils, ChevronDown, ChevronUp, ShoppingBag, Zap, Clock, HelpCircle } from 'lucide-react';
+import { type BaukaPhase } from './components/CustomerCard';
 import { cn } from './utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -51,7 +53,12 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
   const [activeTab, setActiveTab] = useState<'kitchen' | 'storage'>('kitchen');
   const [isBookOpen, setIsBookOpen] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
-  const [hintOpen, setHintOpen] = useState(false); // collapsed by default — doesn't block kitchen
+  const [instructionOpen, setInstructionOpen] = useState(false);
+  const [hintOpen, setHintOpen] = useState(false);
+
+  // Bauka personality
+  const [baukaPhase, setBaukaPhase] = useState<BaukaPhase>('idle');
+  const [baukaDialog, setBaukaDialog] = useState<string | null>(null);
 
   // Speed boost: timestamp until which boost is active
   const [speedBoostEnd, setSpeedBoostEnd] = useState<number | null>(null);
@@ -84,10 +91,15 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
     if (tutorialStep > 0) return;
     if (mode === 'bauka') {
       if (orders.length === 0) {
+        // Баука заказывает случайные блюда из фастфуда и мяса
+        const baukaIds = Object.keys(RECIPES).filter(id =>
+          ['fastfood', 'meat'].includes(RECIPES[id].category)
+        );
+        const recipeId = baukaIds[Math.floor(Math.random() * baukaIds.length)] as RecipeId;
         setOrders([{
           id: `order-${nextOrderId.current++}`,
           characterId: 'bauka',
-          recipeId: 'classic_burger',
+          recipeId,
           maxTime: 999, timeLeft: 999, status: 'waiting',
         }]);
       }
@@ -183,6 +195,21 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
     }));
   };
 
+  const handleChapalk = () => {
+    setBaukaPhase('slapped');
+    setBaukaDialog('АЙ!!! 😱');
+    setTimeout(() => {
+      setBaukaPhase('loving');
+      setBaukaDialog(`А нет нет... это ЛУЧШАЯ ЕДА МОЕЙ ЖИЗНИ! Спасибо, ${playerName}! 😍💖`);
+      setTimeout(() => {
+        setBaukaPhase('idle');
+        setBaukaDialog(null);
+        // После любви — новый заказ Бауки
+        setOrders([]);
+      }, 3200);
+    }, 700);
+  };
+
   const handleBuyBoost = () => {
     if (coins < 20) return;
     setCoins(c => c - 20);
@@ -264,8 +291,24 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
     if (recipeMatched) {
       earned = RECIPES[targetOrder.recipeId].price;
       const timeRatio = targetOrder.timeLeft / targetOrder.maxTime;
-      if (isBauka) { reaction = 'bauka_wow'; earned *= 2; }
-      else if (timeRatio > 0.6) { reaction = 'wow'; earned += 15; }
+      if (isBauka) {
+        earned *= 2;
+        // 35% шанс что Баука притворяется что невкусно
+        if (Math.random() < 0.35) {
+          reaction = 'sad';
+          setBaukaPhase('dislike');
+          setBaukaDialog('Фу... не очень... 🤢');
+        } else {
+          reaction = 'bauka_wow';
+          setBaukaPhase('loving');
+          setBaukaDialog(`Спасибо, ${playerName}! Ты лучший шеф! 💖`);
+          setTimeout(() => {
+            setBaukaPhase('idle');
+            setBaukaDialog(null);
+            setOrders([]);
+          }, 3000);
+        }
+      } else if (timeRatio > 0.6) { reaction = 'wow'; earned += 15; }
       else if (timeRatio < 0.2) { reaction = 'sad'; earned = Math.floor(earned * 0.5); }
       else { reaction = 'good'; }
       setWrongDishInfo(null);
@@ -281,9 +324,11 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
     setOrders(prev => prev.map(o =>
       o.id === targetOrder.id ? { ...o, status: 'eating', reaction } : o
     ));
-    setTimeout(() => {
-      setOrders(prev => prev.filter(o => o.id !== targetOrder.id));
-    }, 2400);
+    if (!isBauka) {
+      setTimeout(() => {
+        setOrders(prev => prev.filter(o => o.id !== targetOrder.id));
+      }, 2400);
+    }
 
     handleClearPlate();
   };
@@ -298,6 +343,7 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
   return (
     <div className="w-full h-full flex flex-col bg-amber-50 overflow-hidden relative">
       {isBookOpen && <RecipeBookModal onClose={() => setIsBookOpen(false)} />}
+      {instructionOpen && <InstructionModal onClose={() => setInstructionOpen(false)} />}
 
       {/* Shop Modal */}
       <AnimatePresence>
@@ -421,18 +467,16 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
               <Zap className="w-3 h-3" /> {speedBoostSecsLeft}с
             </motion.div>
           )}
-          <button
-            onClick={() => setIsBookOpen(true)}
-            className="p-2 bg-amber-400 text-white rounded-full shadow active:scale-95 flex items-center justify-center"
-            title="100 блюд"
-          >
+          <button onClick={() => setInstructionOpen(true)}
+            className="p-2 bg-amber-400 text-white rounded-full shadow active:scale-95 flex items-center justify-center" title="Как играть">
+            <HelpCircle className="w-4 h-4" />
+          </button>
+          <button onClick={() => setIsBookOpen(true)}
+            className="p-2 bg-amber-400 text-white rounded-full shadow active:scale-95 flex items-center justify-center" title="100 блюд">
             <BookOpen className="w-4 h-4" />
           </button>
-          <button
-            onClick={() => setShopOpen(true)}
-            className="p-2 bg-amber-400 text-white rounded-full shadow active:scale-95 flex items-center justify-center"
-            title="Магазин"
-          >
+          <button onClick={() => setShopOpen(true)}
+            className="p-2 bg-amber-400 text-white rounded-full shadow active:scale-95 flex items-center justify-center" title="Магазин">
             <ShoppingBag className="w-4 h-4" />
           </button>
           <div className="flex items-center gap-1.5 bg-orange-600 px-2.5 py-1.5 rounded-full font-black text-amber-200 text-sm shadow">
@@ -457,7 +501,7 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
                 <span className="text-lg">🐻</span>
                 <div className="text-left">
                   <div className="text-[8px] font-black text-orange-600 uppercase tracking-wider">Подсказка</div>
-                  <div className="text-[10px] font-black text-slate-800 leading-tight truncate max-w-[80px]">
+                  <div className="text-[10px] font-black text-slate-800 leading-tight truncate max-w-20">
                     {activeRecipe.name} {activeRecipe.icon}
                   </div>
                 </div>
@@ -570,8 +614,8 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
 
       {/* CUSTOMERS AREA */}
       {mode !== 'free' ? (
-        <div className="bg-amber-100 relative flex items-end pb-3 gap-3 px-4 overflow-x-auto overflow-y-hidden shrink-0 border-b-4 border-orange-300 shadow-inner"
-          style={{ minHeight: '10rem' }}>
+        <div className="bg-amber-100 relative flex items-end pb-2 gap-3 px-4 overflow-x-auto overflow-y-hidden shrink-0 border-b-4 border-orange-300 shadow-inner"
+          style={{ minHeight: '7.5rem', maxHeight: '10rem', WebkitOverflowScrolling: 'touch' }}>
           <div className="absolute inset-0 opacity-10 pointer-events-none"
             style={{ backgroundImage: 'radial-gradient(circle, #f59e0b 2px, transparent 2px)', backgroundSize: '18px 18px' }} />
           <div className="absolute bottom-0 w-full h-6 bg-orange-300 rounded-t-xl" />
@@ -583,6 +627,9 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
                   onServe={() => handleServe(order.id)}
                   canServe={finishedDish !== null && order.status === 'waiting'}
                   isUrgent={order.id === mostUrgentId}
+                  baukaPhase={order.characterId === 'bauka' ? baukaPhase : 'idle'}
+                  baukaDialog={order.characterId === 'bauka' ? baukaDialog : null}
+                  onChapalk={order.characterId === 'bauka' ? handleChapalk : undefined}
                 />
               </div>
             ))}
