@@ -7,6 +7,7 @@ import { InstructionModal } from './components/InstructionModal';
 import { SelfReviewModal } from './components/SelfReviewModal';
 import { CHARACTERS, INGREDIENTS, RECIPES } from './data';
 import { IngredientType, Order, RecipeId, PrepItem } from './types';
+import { addSessionStats } from './profile';
 import { Coins, LogOut, BookOpen, Utensils, ChevronDown, ChevronUp, ShoppingBag, Zap, Clock, HelpCircle } from 'lucide-react';
 import { type BaukaPhase } from './components/CustomerCard';
 import { cn } from './utils';
@@ -28,6 +29,7 @@ interface GameScreenProps {
   onQuit: () => void;
   mode: import('./App').GameMode;
   playerName: string;
+  playerAvatar?: string;
 }
 
 const DONENESS_LABEL: Record<string, string> = {
@@ -49,8 +51,9 @@ const DIFFICULTY_LABEL: Record<number, string> = {
 
 const MAX_CONCURRENT = 3; // guest mode max simultaneous orders
 
-export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
+export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍🍳' }: GameScreenProps) {
   const [coins, setCoins] = useState(0);
+  const [dishesServedCount, setDishesServedCount] = useState(0);
   const [activeTab, setActiveTab] = useState<'kitchen' | 'storage'>('kitchen');
   const [isBookOpen, setIsBookOpen] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
@@ -283,6 +286,7 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
 
     if (mode === 'free') {
       setCoins(c => c + RECIPES[finishedDish].price);
+      setDishesServedCount(n => n + 1);
       setFreeReviewOpen(true);
       return;
     }
@@ -334,6 +338,7 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
     }
 
     setCoins(c => c + earned);
+    if (recipeMatched) setDishesServedCount(n => n + 1);
     setOrders(prev => prev.map(o =>
       o.id === targetOrder.id ? { ...o, status: 'eating', reaction } : o
     ));
@@ -481,12 +486,15 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
 
       {/* HEADER */}
       <div className="flex items-center justify-between px-3 py-2 bg-orange-500 border-b-4 border-orange-600 shrink-0 relative z-30 shadow-md">
-        <button onClick={onQuit} className="p-2 bg-orange-600 rounded-full text-white active:scale-90 transition-transform shadow">
+        <button
+          onClick={() => { addSessionStats(coins, dishesServedCount); onQuit(); }}
+          className="p-2 bg-orange-600 rounded-full text-white active:scale-90 transition-transform shadow"
+        >
           <LogOut className="w-4 h-4" />
         </button>
         <div className="flex flex-col items-center">
           <h1 className="text-sm font-black text-white drop-shadow leading-none">🍽️ Кухня Бауки</h1>
-          <span className="text-[9px] font-bold text-orange-200 leading-none mt-0.5">👨‍🍳 {playerName}</span>
+          <span className="text-[9px] font-bold text-orange-200 leading-none mt-0.5">{playerAvatar} {playerName}</span>
         </div>
         <div className="flex items-center gap-1.5">
           {/* Speed boost indicator */}
