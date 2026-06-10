@@ -116,8 +116,11 @@ export function KitchenView({
           {INGREDIENTS[item.ingredientId].icon}
         </motion.div>
         {item.progress > 0 && item.progress < 100 && (
-          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-1.5 bg-amber-200 rounded-full overflow-hidden">
-            <motion.div className="h-full bg-emerald-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5">
+            <div className="w-10 h-2 bg-amber-200 rounded-full overflow-hidden">
+              <motion.div className="h-full bg-emerald-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
+            </div>
+            <span className="text-[7px] font-black text-emerald-700 leading-none">{Math.round(item.progress)}%</span>
           </div>
         )}
         {item.state === 'raw' && (
@@ -206,8 +209,11 @@ export function KitchenView({
         </motion.div>
 
         {item.progress > 0 && item.progress < 100 && (
-          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-1.5 bg-orange-200 rounded-full overflow-hidden">
-            <motion.div className="h-full bg-orange-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5">
+            <div className="w-10 h-2 bg-orange-200 rounded-full overflow-hidden">
+              <motion.div className="h-full bg-orange-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
+            </div>
+            <span className="text-[7px] font-black text-orange-700 leading-none">{Math.round(item.progress)}%</span>
           </div>
         )}
         {item.state === 'raw' && (
@@ -248,8 +254,11 @@ export function KitchenView({
           {INGREDIENTS[item.ingredientId].icon}
         </motion.div>
         {item.progress > 0 && item.progress < 100 && (
-          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-1.5 bg-red-200 rounded-full overflow-hidden">
-            <motion.div className="h-full bg-red-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5">
+            <div className="w-10 h-2 bg-red-200 rounded-full overflow-hidden">
+              <motion.div className="h-full bg-red-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
+            </div>
+            <span className="text-[7px] font-black text-red-700 leading-none">{Math.round(item.progress)}%</span>
           </div>
         )}
         <motion.div
@@ -298,8 +307,11 @@ export function KitchenView({
           {INGREDIENTS[item.ingredientId].icon}
         </motion.div>
         {item.progress > 0 && item.progress < 100 && (
-          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-10 h-1.5 bg-blue-200 rounded-full overflow-hidden">
-            <motion.div className="h-full bg-blue-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5">
+            <div className="w-10 h-2 bg-blue-200 rounded-full overflow-hidden">
+              <motion.div className="h-full bg-blue-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
+            </div>
+            <span className="text-[7px] font-black text-blue-700 leading-none">{Math.round(item.progress)}%</span>
           </div>
         )}
         {item.state === 'raw' && (
@@ -537,8 +549,8 @@ export function KitchenView({
                   >{dish.icon}</motion.div>
                   {onServe && (
                     <motion.button
-                      animate={{ scale: [1, 1.04, 1] }}
-                      transition={{ repeat: Infinity, duration: 1.4 }}
+                      animate={{ scale: [1, 1.05, 1] }}
+                      transition={{ repeat: 2, duration: 1.2 }}
                       onClick={onServe}
                       className="bg-emerald-500 text-white rounded-full px-4 py-2 font-black text-sm shadow-lg active:scale-95 border-4 border-emerald-300 whitespace-nowrap"
                     >

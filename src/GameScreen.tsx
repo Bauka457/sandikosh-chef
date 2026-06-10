@@ -33,50 +33,74 @@ interface GameScreenProps {
 }
 
 const DONENESS_LABEL: Record<string, string> = {
-  'rare': '🩸 С кровью',
-  'medium-rare': '🟠 Средне-сырое',
-  'medium': '🟡 Средняя',
-  'well-done': '✅ Прожарено',
-  'crispy': '🟤 Хрустящее',
-  'al-dente': '🍝 Аль денте',
-  'golden': '🟨 Золотистое',
-  'fully-cooked': '✅ Готово',
+  'rare': '🩸 С кровью', 'medium-rare': '🟠 Средне-сырое', 'medium': '🟡 Средняя',
+  'well-done': '✅ Прожарено', 'crispy': '🟤 Хрустящее', 'al-dente': '🍝 Аль денте',
+  'golden': '🟨 Золотистое', 'fully-cooked': '✅ Готово',
 };
-
-const DIFFICULTY_LABEL: Record<number, string> = {
-  1: '⭐ Легко',
-  2: '⭐⭐ Средне',
-  3: '⭐⭐⭐ Сложно',
-};
-
-const MAX_CONCURRENT = 3; // guest mode max simultaneous orders
+const DIFFICULTY_LABEL: Record<number, string> = { 1: '⭐ Легко', 2: '⭐⭐ Средне', 3: '⭐⭐⭐ Сложно' };
+const MAX_CONCURRENT = 3;
+const MAX_LIVES = 3;
 
 export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍🍳' }: GameScreenProps) {
+  // ── Session stats + save-once refs ──
   const [coins, setCoins] = useState(0);
   const [dishesServedCount, setDishesServedCount] = useState(0);
+  const coinsRef = useRef(0);
+  const dishesRef = useRef(0);
+  const sessionSavedRef = useRef(false);
+  useEffect(() => { coinsRef.current = coins; }, [coins]);
+  useEffect(() => { dishesRef.current = dishesServedCount; }, [dishesServedCount]);
+
+  // ── Timer cleanup ──
+  const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const safeTimeout = (fn: () => void, ms: number) => {
+    const id = setTimeout(fn, ms);
+    timersRef.current.push(id);
+    return id;
+  };
+
+  // ── Lives & game over ──
+  const [lives, setLives] = useState(MAX_LIVES);
+  const [gameOver, setGameOver] = useState(false);
+
+  // ── Combo ──
+  const [combo, setCombo] = useState(0);
+  const [bestCombo, setBestCombo] = useState(0);
+
+  // ── Wave progression (guests mode) ──
+  const [wave, setWave] = useState(1);
+  const [waveNotif, setWaveNotif] = useState<string | null>(null);
+  const waveServedRef = useRef(0);
+  const waveRef = useRef(1);
+  useEffect(() => { waveRef.current = wave; }, [wave]);
+
+  // ── Summary modal ──
+  const [showSummary, setShowSummary] = useState(false);
+
+  // ── UI state ──
   const [activeTab, setActiveTab] = useState<'kitchen' | 'storage'>('kitchen');
   const [isBookOpen, setIsBookOpen] = useState(false);
   const [shopOpen, setShopOpen] = useState(false);
   const [instructionOpen, setInstructionOpen] = useState(false);
   const [hintOpen, setHintOpen] = useState(false);
 
-  // Bauka personality
+  // ── Bauka ──
   const [baukaPhase, setBaukaPhase] = useState<BaukaPhase>('idle');
   const [baukaDialog, setBaukaDialog] = useState<string | null>(null);
 
-  // Free mode: selected recipe to practice + review state
+  // ── Free mode ──
   const [freeRecipeId, setFreeRecipeId] = useState<RecipeId | null>(null);
   const [freeReviewOpen, setFreeReviewOpen] = useState(false);
 
-  // Speed boost: timestamp until which boost is active
+  // ── Speed boost ──
   const [speedBoostEnd, setSpeedBoostEnd] = useState<number | null>(null);
   const [speedBoostSecsLeft, setSpeedBoostSecsLeft] = useState(0);
 
-  // plate flash feedback: 'good' | 'bad' | null
+  // ── Feedback ──
   const [plateFlash, setPlateFlash] = useState<'good' | 'bad' | null>(null);
-  // wrong dish info
   const [wrongDishInfo, setWrongDishInfo] = useState<{ expected: string; got: string } | null>(null);
 
+  // ── Cooking state ──
   const [plate, setPlate] = useState<IngredientType[]>([]);
   const [prepItems, setPrepItems] = useState<PrepItem[]>([]);
   const [finishedDish, setFinishedDish] = useState<RecipeId | null>(null);
@@ -86,51 +110,74 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
   const nextOrderId = useRef(1);
   const nextPrepId = useRef(1);
 
-  // Stock tracking (mirrors maxStock minus in-prep)
+  // Stock: exclude items in prep AND already on the plate
   const stock = Object.fromEntries(
     Object.values(INGREDIENTS).map(i => [
       i.id,
-      i.maxStock - prepItems.filter(p => p.ingredientId === i.id).length,
+      i.maxStock
+        - prepItems.filter(p => p.ingredientId === i.id).length
+        - plate.filter(id => id === i.id).length,
     ])
   );
 
-  // Auto-spawn orders for guests mode
+  const saveSession = () => {
+    if (sessionSavedRef.current) return;
+    sessionSavedRef.current = true;
+    addSessionStats(coinsRef.current, dishesRef.current);
+  };
+
+  // ── Unmount: clear timers and save ──
   useEffect(() => {
-    if (tutorialStep > 0) return;
+    return () => {
+      timersRef.current.forEach(clearTimeout);
+      saveSession();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Lives → game over ──
+  useEffect(() => {
+    if (lives <= 0 && !gameOver && mode !== 'free') {
+      saveSession();
+      setGameOver(true);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lives]);
+
+  // ── Auto-spawn orders ──
+  useEffect(() => {
+    if (tutorialStep > 0 || gameOver) return;
     if (mode === 'bauka') {
       if (orders.length === 0) {
-        // Баука заказывает случайные блюда из фастфуда и мяса
         const baukaIds = Object.keys(RECIPES).filter(id =>
           ['fastfood', 'meat'].includes(RECIPES[id].category)
         );
         const recipeId = baukaIds[Math.floor(Math.random() * baukaIds.length)] as RecipeId;
         setOrders([{
           id: `order-${nextOrderId.current++}`,
-          characterId: 'bauka',
-          recipeId,
+          characterId: 'bauka', recipeId,
           maxTime: 999, timeLeft: 999, status: 'waiting',
         }]);
       }
       return;
     }
     if (mode !== 'guests') return;
-
     const active = orders.filter(o => o.status !== 'done').length;
     if (active >= MAX_CONCURRENT) return;
-
     const delay = orders.length === 0 ? 0 : 1200;
-    const t = setTimeout(spawnCustomer, delay);
+    const t = setTimeout(() => spawnCustomer(waveRef.current), delay);
     return () => clearTimeout(t);
-  }, [tutorialStep, orders, mode]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tutorialStep, orders, mode, gameOver]);
 
-  // Auto-dismiss wrong dish notification after 3 seconds
+  // ── Auto-dismiss wrong dish notification ──
   useEffect(() => {
     if (!wrongDishInfo) return;
     const t = setTimeout(() => setWrongDishInfo(null), 3000);
     return () => clearTimeout(t);
   }, [wrongDishInfo]);
 
-  // Speed boost countdown display
+  // ── Speed boost countdown ──
   useEffect(() => {
     if (!speedBoostEnd) return;
     const interval = setInterval(() => {
@@ -141,14 +188,16 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
     return () => clearInterval(interval);
   }, [speedBoostEnd]);
 
-  // Countdown timer
+  // ── Countdown timer ──
   useEffect(() => {
-    if (mode !== 'guests' || tutorialStep > 0) return;
+    if (mode !== 'guests' || tutorialStep > 0 || gameOver) return;
     const interval = setInterval(() => {
       setOrders(prev => prev.map(o => {
         if (o.status !== 'waiting') return o;
         const newTime = o.timeLeft - 1;
         if (newTime <= 0) {
+          setLives(l => l - 1);
+          setCombo(0);
           setTimeout(() => setOrders(c => c.filter(x => x.id !== o.id)), 2200);
           return { ...o, timeLeft: 0, status: 'eating', reaction: 'sad' };
         }
@@ -156,38 +205,37 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
       }));
     }, 1000);
     return () => clearInterval(interval);
-  }, [mode, tutorialStep]);
+  }, [mode, tutorialStep, gameOver]);
 
-  const spawnCustomer = () => {
+  const spawnCustomer = (currentWave: number) => {
     const validChars = CHARACTERS.filter(c => c.id !== 'bauka');
     const char = validChars[Math.floor(Math.random() * validChars.length)];
-    const recipeIds = Object.keys(RECIPES) as RecipeId[];
-    const recipeId = recipeIds[Math.floor(Math.random() * recipeIds.length)];
+    const minTime = Math.max(40, 90 - (currentWave - 1) * 5);
+    let recipePool = Object.keys(RECIPES) as RecipeId[];
+    if (currentWave >= 3 && Math.random() < 0.4) {
+      const harder = recipePool.filter(id => (RECIPES[id].difficulty ?? 1) >= 2);
+      if (harder.length > 0) recipePool = harder;
+    }
+    if (currentWave >= 5 && Math.random() < 0.3) {
+      const hardest = recipePool.filter(id => (RECIPES[id].difficulty ?? 1) >= 3);
+      if (hardest.length > 0) recipePool = hardest;
+    }
+    const recipeId = recipePool[Math.floor(Math.random() * recipePool.length)];
     setOrders(prev => [
       ...prev.filter(o => o.status !== 'done'),
-      {
-        id: `order-${nextOrderId.current++}`,
-        characterId: char.id,
-        recipeId,
-        maxTime: 90,
-        timeLeft: 90,
-        status: 'waiting',
-      },
+      { id: `order-${nextOrderId.current++}`, characterId: char.id, recipeId, maxTime: minTime, timeLeft: minTime, status: 'waiting' },
     ]);
   };
 
   const handleTakeIngredient = (id: IngredientType) => {
     const currentCount = prepItems.filter(i => i.ingredientId === id).length;
     if (currentCount >= INGREDIENTS[id].maxStock) return;
-    setPrepItems(prev => [
-      ...prev,
-      {
-        id: `prep-${nextPrepId.current++}`,
-        ingredientId: id,
-        state: INGREDIENTS[id].process === 'none' ? 'ready' : 'raw',
-        progress: 0,
-      },
-    ]);
+    setPrepItems(prev => [...prev, {
+      id: `prep-${nextPrepId.current++}`,
+      ingredientId: id,
+      state: INGREDIENTS[id].process === 'none' ? 'ready' : 'raw',
+      progress: 0,
+    }]);
   };
 
   const handleProcessItem = (id: string, action: import('./types').ProcessType, amount: number) => {
@@ -206,10 +254,10 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
   const handleChapalk = () => {
     setBaukaPhase('slapped');
     setBaukaDialog('АЙ!!! 😱');
-    setTimeout(() => {
+    safeTimeout(() => {
       setBaukaPhase('loving');
       setBaukaDialog(`А нет нет... это ЛУЧШАЯ ЕДА МОЕЙ ЖИЗНИ! Спасибо, ${playerName}! 😍💖`);
-      setTimeout(() => {
+      safeTimeout(() => {
         setBaukaPhase('idle');
         setBaukaDialog(null);
         setOrders([]);
@@ -228,27 +276,19 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
 
   const handleBuyTime = () => {
     if (coins < 15) return;
-    const target = [...orders]
-      .filter(o => o.status === 'waiting')
-      .sort((a, b) => a.timeLeft - b.timeLeft)[0];
+    const target = [...orders].filter(o => o.status === 'waiting').sort((a, b) => a.timeLeft - b.timeLeft)[0];
     if (!target) return;
     setCoins(c => c - 15);
-    setOrders(prev => prev.map(o =>
-      o.id === target.id ? { ...o, timeLeft: Math.min(o.maxTime, o.timeLeft + 20) } : o
-    ));
+    setOrders(prev => prev.map(o => o.id === target.id ? { ...o, timeLeft: Math.min(o.maxTime, o.timeLeft + 20) } : o));
     setShopOpen(false);
   };
 
   const handleAssembleItem = (item: PrepItem) => {
     if (item.state !== 'ready') return;
-
-    // Check if this ingredient is the correct next step for the active order
     const waitingOrder = orders.find(o => o.status === 'waiting');
     if (waitingOrder && mode !== 'free') {
-      const expectedRecipe = RECIPES[waitingOrder.recipeId];
-      const expectedIngredient = expectedRecipe?.steps[plate.length]?.ingredient;
+      const expectedIngredient = RECIPES[waitingOrder.recipeId]?.steps[plate.length]?.ingredient;
       if (expectedIngredient && expectedIngredient !== item.ingredientId) {
-        // Wrong ingredient — red flash but still add (player can clear)
         setPlateFlash('bad');
         setTimeout(() => setPlateFlash(null), 500);
       } else {
@@ -256,7 +296,6 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
         setTimeout(() => setPlateFlash(null), 350);
       }
     }
-
     setPlate(prev => {
       const newPlate = [...prev, item.ingredientId];
       const completed = checkRecipeCompletion(newPlate);
@@ -266,14 +305,12 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
     setPrepItems(prev => prev.filter(i => i.id !== item.id));
   };
 
-  // Clears only the assembled plate — keeps cooking-in-progress items intact
   const handleClearPlate = () => {
     setPlate([]);
     setFinishedDish(null);
     setWrongDishInfo(null);
   };
 
-  // Full reset: plate + all prep items (used after serving)
   const handleResetAll = () => {
     setPlate([]);
     setFinishedDish(null);
@@ -288,16 +325,12 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
       setCoins(c => c + RECIPES[finishedDish].price);
       setDishesServedCount(n => n + 1);
       setFreeReviewOpen(true);
-      return;
+      return; // plate persists until review is dismissed
     }
 
-    // Find target order: specified or most urgent waiting
     const targetOrder = orderId
       ? orders.find(o => o.id === orderId && o.status === 'waiting')
-      : [...orders]
-          .filter(o => o.status === 'waiting')
-          .sort((a, b) => a.timeLeft - b.timeLeft)[0];
-
+      : [...orders].filter(o => o.status === 'waiting').sort((a, b) => a.timeLeft - b.timeLeft)[0];
     if (!targetOrder) return;
 
     const recipeMatched = targetOrder.recipeId === finishedDish;
@@ -307,10 +340,13 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
 
     if (recipeMatched) {
       earned = RECIPES[targetOrder.recipeId].price;
-      const timeRatio = targetOrder.timeLeft / targetOrder.maxTime;
+      const newCombo = combo + 1;
+      setCombo(newCombo);
+      setBestCombo(bc => Math.max(bc, newCombo));
+      const multiplier = newCombo >= 5 ? 3 : newCombo >= 3 ? 2 : 1;
+
       if (isBauka) {
-        earned *= 2;
-        // 35% шанс что Баука притворяется что невкусно
+        earned = earned * 2 * multiplier;
         if (Math.random() < 0.35) {
           reaction = 'sad';
           setBaukaPhase('dislike');
@@ -319,50 +355,75 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
           reaction = 'bauka_wow';
           setBaukaPhase('loving');
           setBaukaDialog(`Спасибо, ${playerName}! Ты лучший шеф! 💖`);
-          setTimeout(() => {
-            setBaukaPhase('idle');
-            setBaukaDialog(null);
-            setOrders([]);
-          }, 3000);
+          safeTimeout(() => { setBaukaPhase('idle'); setBaukaDialog(null); setOrders([]); }, 3000);
         }
-      } else if (timeRatio > 0.6) { reaction = 'wow'; earned += 15; }
-      else if (timeRatio < 0.2) { reaction = 'sad'; earned = Math.floor(earned * 0.5); }
-      else { reaction = 'good'; }
+      } else {
+        const timeRatio = targetOrder.timeLeft / targetOrder.maxTime;
+        if (timeRatio > 0.6) { reaction = 'wow'; earned = (earned + 15) * multiplier; }
+        else if (timeRatio < 0.2) { reaction = 'sad'; earned = Math.floor(earned * 0.5 * multiplier); }
+        else { reaction = 'good'; earned = earned * multiplier; }
+      }
+
       setWrongDishInfo(null);
+      setDishesServedCount(n => n + 1);
+
+      if (mode === 'guests') {
+        waveServedRef.current++;
+        if (waveServedRef.current % 5 === 0) {
+          const newWave = waveRef.current + 1;
+          setWave(newWave);
+          waveRef.current = newWave;
+          setWaveNotif(`Волна ${newWave}! 🌊`);
+          safeTimeout(() => setWaveNotif(null), 2500);
+        }
+      }
     } else {
       reaction = 'sad';
+      setCombo(0);
+      setPlateFlash('bad');
+      safeTimeout(() => setPlateFlash(null), 500);
       setWrongDishInfo({
-        expected: RECIPES[targetOrder.recipeId].name,
-        got: RECIPES[finishedDish]?.name ?? '?',
+        expected: RECIPES[targetOrder.recipeId]?.name ?? targetOrder.recipeId,
+        got: RECIPES[finishedDish]?.name ?? finishedDish,
       });
     }
 
     setCoins(c => c + earned);
-    if (recipeMatched) setDishesServedCount(n => n + 1);
-    setOrders(prev => prev.map(o =>
-      o.id === targetOrder.id ? { ...o, status: 'eating', reaction } : o
-    ));
+    setOrders(prev => prev.map(o => o.id === targetOrder.id ? { ...o, status: 'eating', reaction } : o));
     if (!isBauka) {
-      setTimeout(() => {
-        setOrders(prev => prev.filter(o => o.id !== targetOrder.id));
-      }, 2400);
+      safeTimeout(() => setOrders(prev => prev.filter(o => o.id !== targetOrder.id)), 2400);
     }
-
     handleResetAll();
   };
 
-  // Most urgent waiting order for hint / quick serve
+  const handleRestartGame = () => {
+    sessionSavedRef.current = false;
+    setCoins(0); setDishesServedCount(0);
+    setLives(MAX_LIVES); setGameOver(false);
+    setCombo(0); setBestCombo(0);
+    setWave(1); waveServedRef.current = 0; waveRef.current = 1;
+    setShowSummary(false); setWaveNotif(null);
+    setPlate([]); setPrepItems([]); setFinishedDish(null);
+    setOrders([]); setBaukaPhase('idle'); setBaukaDialog(null);
+    setSpeedBoostEnd(null); setWrongDishInfo(null);
+    setTutorialStep(0);
+  };
+
+  const handleQuitToMenu = () => { saveSession(); onQuit(); };
+
+  // ── Derived values ──
   const waitingOrders = orders.filter(o => o.status === 'waiting');
   const sortedWaiting = [...waitingOrders].sort((a, b) => a.timeLeft - b.timeLeft);
   const mostUrgentId = sortedWaiting[0]?.id ?? null;
   const activeOrder = sortedWaiting[0] ?? orders.find(o => o.status === 'eating');
-  // In free mode use selected practice recipe; in order modes use most urgent order
   const activeRecipe = mode === 'free'
     ? (freeRecipeId ? RECIPES[freeRecipeId] : null)
     : (activeOrder ? RECIPES[activeOrder.recipeId] : null);
+  const comboMultiplier = combo >= 5 ? 3 : combo >= 3 ? 2 : 1;
 
   return (
     <div className="w-full h-full flex flex-col bg-amber-50 overflow-hidden relative">
+      {/* ── Modals ── */}
       {isBookOpen && (
         <RecipeBookModal
           onClose={() => setIsBookOpen(false)}
@@ -372,27 +433,21 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
       {instructionOpen && <InstructionModal onClose={() => setInstructionOpen(false)} />}
       {freeReviewOpen && activeRecipe && (
         <SelfReviewModal
-          recipe={activeRecipe}
-          playerName={playerName}
+          recipe={activeRecipe} playerName={playerName}
           onPlayAgain={() => { setFreeReviewOpen(false); handleResetAll(); }}
           onChooseOther={() => { setFreeReviewOpen(false); setFreeRecipeId(null); handleResetAll(); setIsBookOpen(true); }}
         />
       )}
 
-      {/* Shop Modal */}
+      {/* ── Shop ── */}
       <AnimatePresence>
         {shopOpen && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 flex items-end justify-center"
-            onClick={() => setShopOpen(false)}
-          >
-            <motion.div
-              initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 flex items-end justify-center" onClick={() => setShopOpen(false)}>
+            <motion.div initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
               transition={{ type: 'spring', damping: 28, stiffness: 320 }}
               className="bg-white w-full rounded-t-3xl border-t-4 border-amber-400 shadow-2xl p-5 pb-8"
-              onClick={e => e.stopPropagation()}
-            >
+              onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h3 className="text-lg font-black text-slate-800">🛒 Магазин</h3>
@@ -402,50 +457,30 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
                   <Coins className="w-4 h-4" /> {coins} монет
                 </div>
               </div>
-
               <div className="flex flex-col gap-3">
-                {/* Speed Boost */}
-                <div className={cn(
-                  "flex items-center gap-3 bg-yellow-50 border-2 rounded-2xl p-3",
-                  coins >= 20 ? 'border-yellow-400' : 'border-slate-200 opacity-50'
-                )}>
+                <div className={cn("flex items-center gap-3 bg-yellow-50 border-2 rounded-2xl p-3", coins >= 20 ? 'border-yellow-400' : 'border-slate-200 opacity-50')}>
                   <div className="w-12 h-12 bg-yellow-400 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow">⚡</div>
                   <div className="flex-1">
                     <div className="font-black text-slate-800 text-sm">Буст кухни</div>
                     <div className="text-[11px] font-bold text-slate-500">×2 скорость всех станций на 30 сек</div>
-                    {speedBoostEnd && (
-                      <div className="text-[10px] font-black text-yellow-600 mt-0.5">Активен: {speedBoostSecsLeft}с</div>
-                    )}
+                    {speedBoostEnd && <div className="text-[10px] font-black text-yellow-600 mt-0.5">Активен: {speedBoostSecsLeft}с</div>}
                   </div>
-                  <button
-                    disabled={coins < 20}
-                    onClick={handleBuyBoost}
-                    className="shrink-0 bg-yellow-400 text-yellow-900 font-black text-sm px-3 py-1.5 rounded-full shadow active:scale-95 disabled:opacity-40 border-2 border-yellow-300 flex items-center gap-1"
-                  >
+                  <button disabled={coins < 20} onClick={handleBuyBoost}
+                    className="shrink-0 bg-yellow-400 text-yellow-900 font-black text-sm px-3 py-1.5 rounded-full shadow active:scale-95 disabled:opacity-40 border-2 border-yellow-300 flex items-center gap-1">
                     <Zap className="w-3.5 h-3.5" /> 20
                   </button>
                 </div>
-
-                {/* Extra Time */}
-                <div className={cn(
-                  "flex items-center gap-3 bg-blue-50 border-2 rounded-2xl p-3",
-                  coins >= 15 && waitingOrders.length > 0 ? 'border-blue-400' : 'border-slate-200 opacity-50'
-                )}>
+                <div className={cn("flex items-center gap-3 bg-blue-50 border-2 rounded-2xl p-3", coins >= 15 && waitingOrders.length > 0 ? 'border-blue-400' : 'border-slate-200 opacity-50')}>
                   <div className="w-12 h-12 bg-blue-400 rounded-2xl flex items-center justify-center text-2xl shrink-0 shadow">⏳</div>
                   <div className="flex-1">
                     <div className="font-black text-slate-800 text-sm">Попросить подождать</div>
                     <div className="text-[11px] font-bold text-slate-500">
                       +20 сек самому нетерпеливому гостю
-                      {sortedWaiting[0] && (
-                        <span className="text-blue-600"> ({RECIPES[sortedWaiting[0].recipeId]?.name})</span>
-                      )}
+                      {sortedWaiting[0] && <span className="text-blue-600"> ({RECIPES[sortedWaiting[0].recipeId]?.name})</span>}
                     </div>
                   </div>
-                  <button
-                    disabled={coins < 15 || waitingOrders.length === 0}
-                    onClick={handleBuyTime}
-                    className="shrink-0 bg-blue-400 text-white font-black text-sm px-3 py-1.5 rounded-full shadow active:scale-95 disabled:opacity-40 border-2 border-blue-300 flex items-center gap-1"
-                  >
+                  <button disabled={coins < 15 || waitingOrders.length === 0} onClick={handleBuyTime}
+                    className="shrink-0 bg-blue-400 text-white font-black text-sm px-3 py-1.5 rounded-full shadow active:scale-95 disabled:opacity-40 border-2 border-blue-300 flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5" /> 15
                   </button>
                 </div>
@@ -455,88 +490,179 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
         )}
       </AnimatePresence>
 
-      {/* Tutorial overlay */}
+      {/* ── Tutorial overlay ── */}
       {tutorialStep > 0 && mode !== 'free' && (
         <div className="absolute inset-0 z-100 flex items-center justify-center bg-black/75 p-6 backdrop-blur-sm">
-          <motion.div
-            initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-            className="bg-white rounded-3xl p-6 shadow-2xl max-w-sm w-full flex flex-col items-center text-center"
-          >
+          <motion.div initial={{ scale: 0.85, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            className="bg-white rounded-3xl p-6 shadow-2xl max-w-sm w-full flex flex-col items-center text-center">
             <div className="text-6xl mb-3">👨‍🍳</div>
             <h2 className="text-2xl font-black text-slate-800 mb-2">Привет, {playerName}!</h2>
             <p className="font-bold text-orange-500 mb-3 text-sm">
               {mode === 'bauka' ? '🐻 Готовим для Бауки!' : '🍽️ Ресторан открыт!'}
             </p>
             <div className="bg-orange-50 rounded-2xl p-4 text-left mb-5 w-full space-y-2">
-              <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>📋</span> Смотри подсказку справа вверху — там все шаги рецепта</p>
+              <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>📋</span> Смотри подсказку справа — там все шаги рецепта</p>
               <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>⚡</span> Quick Pick (полоска под кухней) — бери ингредиенты одним касанием</p>
               <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>🔪</span> Тапай или свайпай на разделочной доске</p>
               <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>🍳</span> Тапай по мясу на плите чтобы пожарить</p>
               <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>✅</span> Готово → тапни → добавь на тарелку → ПОДАТЬ!</p>
+              {mode === 'guests' && <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>❤️</span> У тебя 3 жизни — не дай гостям уйти!</p>}
             </div>
-            <button
-              onClick={() => setTutorialStep(0)}
-              className="bg-orange-500 text-white px-8 py-3 rounded-full font-black text-xl shadow-lg active:scale-95 transition-transform"
-            >
+            <button onClick={() => setTutorialStep(0)}
+              className="bg-orange-500 text-white px-8 py-3 rounded-full font-black text-xl shadow-lg active:scale-95 transition-transform">
               Начать! 🍳
             </button>
           </motion.div>
         </div>
       )}
 
-      {/* HEADER */}
-      <div className="flex items-center justify-between px-3 py-2 bg-orange-500 border-b-4 border-orange-600 shrink-0 relative z-30 shadow-md">
-        <button
-          onClick={() => { addSessionStats(coins, dishesServedCount); onQuit(); }}
-          className="p-2 bg-orange-600 rounded-full text-white active:scale-90 transition-transform shadow"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
-        <div className="flex flex-col items-center">
-          <h1 className="text-sm font-black text-white drop-shadow leading-none">🍽️ Кухня Бауки</h1>
-          <span className="text-[9px] font-bold text-orange-200 leading-none mt-0.5">{playerAvatar} {playerName}</span>
+      {/* ── Game Over ── */}
+      <AnimatePresence>
+        {gameOver && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="absolute inset-0 z-50 bg-black/80 flex flex-col items-center justify-center p-6 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', bounce: 0.4, delay: 0.1 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl text-center">
+              <div className="text-6xl mb-2">😢</div>
+              <h2 className="text-2xl font-black text-slate-800 mb-1">Кухня закрыта!</h2>
+              <p className="text-sm text-slate-400 font-bold mb-4">Гости ушли голодными...</p>
+              <div className="grid grid-cols-3 gap-2 mb-5">
+                {[{ icon: '💰', label: 'Монет', val: coins }, { icon: '🍽️', label: 'Блюд', val: dishesServedCount }, { icon: '🔥', label: 'Лучший комбо', val: bestCombo }].map(s => (
+                  <div key={s.label} className="bg-amber-50 rounded-xl p-2 border border-amber-100">
+                    <div className="text-xl">{s.icon}</div>
+                    <div className="text-lg font-black text-slate-800">{s.val}</div>
+                    <div className="text-[9px] text-slate-400 font-bold">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-3">
+                <button onClick={handleRestartGame}
+                  className="flex-1 py-3 bg-orange-500 text-white font-black rounded-2xl border-b-4 border-orange-700 shadow active:scale-95 text-sm">
+                  🔄 Ещё раз
+                </button>
+                <button onClick={handleQuitToMenu}
+                  className="flex-1 py-3 bg-white border-2 border-slate-200 text-slate-600 font-black rounded-2xl active:scale-95 text-sm">
+                  🏠 В меню
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Session summary ── */}
+      <AnimatePresence>
+        {showSummary && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-black/70 flex flex-col items-center justify-center p-6 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', bounce: 0.3 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl text-center">
+              <div className="text-5xl mb-2">🏁</div>
+              <h2 className="text-xl font-black text-slate-800 mb-1">Итоги сессии</h2>
+              <p className="text-xs font-bold text-slate-400 mb-4">{playerAvatar} {playerName}</p>
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                {[{ icon: '💰', label: 'Монет', val: coins }, { icon: '🍽️', label: 'Блюд', val: dishesServedCount }, { icon: '🔥', label: 'Лучший комбо', val: bestCombo }].map(s => (
+                  <div key={s.label} className="bg-amber-50 rounded-xl p-2 border border-amber-100">
+                    <div className="text-xl">{s.icon}</div>
+                    <div className="text-lg font-black text-slate-800">{s.val}</div>
+                    <div className="text-[9px] text-slate-400 font-bold">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              {mode === 'guests' && wave > 1 && (
+                <div className="mb-4 bg-blue-50 rounded-2xl px-4 py-2 border border-blue-100">
+                  <p className="text-sm font-black text-blue-600">🌊 Достигнута волна {wave}</p>
+                </div>
+              )}
+              <div className="flex gap-3">
+                <button onClick={() => setShowSummary(false)}
+                  className="flex-1 py-3 bg-orange-500 text-white font-black rounded-2xl border-b-4 border-orange-700 shadow active:scale-95 text-sm">
+                  🍳 Играть ещё
+                </button>
+                <button onClick={handleQuitToMenu}
+                  className="flex-1 py-3 bg-white border-2 border-slate-200 text-slate-600 font-black rounded-2xl active:scale-95 text-sm">
+                  🏠 В меню
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── HEADER (two rows) ── */}
+      <div className="bg-orange-500 border-b-4 border-orange-600 shrink-0 relative z-30 shadow-md">
+        {/* Row 1: exit | title | lives + coins */}
+        <div className="flex items-center justify-between px-3 pt-1.5 pb-1">
+          <button
+            onClick={() => mode === 'free' ? handleQuitToMenu() : setShowSummary(true)}
+            className="p-2 bg-orange-600 rounded-full text-white active:scale-90 transition-transform shadow"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+          <div className="flex flex-col items-center">
+            <h1 className="text-sm font-black text-white drop-shadow leading-none">🍽️ Кухня Бауки</h1>
+            <span className="text-[9px] font-bold text-orange-200 leading-none mt-0.5">{playerAvatar} {playerName}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {mode !== 'free' && (
+              <div className="flex gap-0.5">
+                {Array.from({ length: MAX_LIVES }).map((_, i) => (
+                  <span key={i} className={cn("text-sm leading-none", i < lives ? '' : 'grayscale opacity-30')}>❤️</span>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-1 bg-orange-600 px-2.5 py-1.5 rounded-full font-black text-amber-200 text-sm shadow">
+              <Coins className="w-3.5 h-3.5" /><span>{coins}</span>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          {/* Speed boost indicator */}
+
+        {/* Row 2: status badges | secondary buttons */}
+        <div className="flex items-center px-3 pb-1.5 gap-1.5">
           {speedBoostEnd && (
-            <motion.div
-              animate={{ scale: [1, 1.06, 1] }}
-              transition={{ repeat: Infinity, duration: 0.5 }}
-              className="flex items-center gap-1 bg-yellow-400 text-yellow-900 rounded-full px-2 py-1 text-[10px] font-black shadow border-2 border-yellow-300"
-            >
-              <Zap className="w-3 h-3" /> {speedBoostSecsLeft}с
+            <motion.div animate={{ scale: [1, 1.06, 1] }} transition={{ repeat: Infinity, duration: 0.5 }}
+              className="flex items-center gap-1 bg-yellow-400 text-yellow-900 rounded-full px-2 py-0.5 text-[10px] font-black shadow border border-yellow-300">
+              <Zap className="w-2.5 h-2.5" /> {speedBoostSecsLeft}с
             </motion.div>
           )}
-          <button onClick={() => setInstructionOpen(true)}
-            className="p-2 bg-amber-400 text-white rounded-full shadow active:scale-95 flex items-center justify-center" title="Как играть">
-            <HelpCircle className="w-4 h-4" />
-          </button>
-          <button onClick={() => setIsBookOpen(true)}
-            className="p-2 bg-amber-400 text-white rounded-full shadow active:scale-95 flex items-center justify-center" title="100 блюд">
-            <BookOpen className="w-4 h-4" />
-          </button>
-          <button onClick={() => setShopOpen(true)}
-            className="p-2 bg-amber-400 text-white rounded-full shadow active:scale-95 flex items-center justify-center" title="Магазин">
-            <ShoppingBag className="w-4 h-4" />
-          </button>
-          <div className="flex items-center gap-1.5 bg-orange-600 px-2.5 py-1.5 rounded-full font-black text-amber-200 text-sm shadow">
-            <Coins className="w-3.5 h-3.5" />
-            <span>{coins}</span>
+          {combo >= 3 && (
+            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', bounce: 0.6 }}
+              className={cn("flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black shadow border",
+                combo >= 5 ? 'bg-purple-500 border-purple-300 text-white' : 'bg-rose-500 border-rose-300 text-white')}>
+              {combo >= 5 ? '⚡' : '🔥'} ×{comboMultiplier} × {combo}
+            </motion.div>
+          )}
+          {mode === 'guests' && wave > 1 && (
+            <div className="flex items-center gap-1 bg-blue-500 text-white rounded-full px-2 py-0.5 text-[10px] font-black shadow">
+              🌊 В{wave}
+            </div>
+          )}
+          <div className="flex items-center gap-1 ml-auto">
+            <button onClick={() => setShopOpen(true)} title="Магазин"
+              className="p-1.5 bg-amber-400 text-white rounded-full shadow active:scale-95">
+              <ShoppingBag className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => setIsBookOpen(true)} title="100 блюд"
+              className="p-1.5 bg-amber-400 text-white rounded-full shadow active:scale-95">
+              <BookOpen className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => setInstructionOpen(true)} title="Как играть"
+              className="p-1.5 bg-amber-400 text-white rounded-full shadow active:scale-95">
+              <HelpCircle className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
       </div>
 
-      {/* HINT — top-right corner */}
+      {/* ── Recipe hint (top-right) ── */}
       {activeRecipe && tutorialStep === 0 && (
-        <div className="absolute top-14 right-1 w-44 z-40 pointer-events-auto">
-          <motion.div
-            initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
-            className="bg-white/95 backdrop-blur rounded-2xl shadow-xl border-2 border-orange-300 overflow-hidden"
-          >
-            <button
-              className="w-full flex items-center justify-between px-3 py-2 bg-orange-100 border-b border-orange-200"
-              onClick={() => setHintOpen(v => !v)}
-            >
+        <div className="absolute top-20 right-1 w-44 z-40 pointer-events-auto">
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
+            className="bg-white/95 backdrop-blur rounded-2xl shadow-xl border-2 border-orange-300 overflow-hidden">
+            <button className="w-full flex items-center justify-between px-3 py-2 bg-orange-100 border-b border-orange-200"
+              onClick={() => setHintOpen(v => !v)}>
               <div className="flex items-center gap-2">
                 <span className="text-lg">🐻</span>
                 <div className="text-left">
@@ -546,18 +672,12 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
                   </div>
                 </div>
               </div>
-              {hintOpen
-                ? <ChevronUp className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                : <ChevronDown className="w-3.5 h-3.5 text-orange-500 shrink-0" />}
+              {hintOpen ? <ChevronUp className="w-3.5 h-3.5 text-orange-500 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-orange-500 shrink-0" />}
             </button>
             <AnimatePresence>
               {hintOpen && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }}
-                  className="overflow-hidden"
-                >
-                  {/* Meta */}
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
                   <div className="px-3 pt-2 pb-1 grid grid-cols-2 gap-1">
                     {activeRecipe.servingGrams && (
                       <div className="bg-amber-50 rounded-lg px-2 py-1 text-center border border-amber-100">
@@ -584,15 +704,11 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
                       </div>
                     )}
                   </div>
-
-                  {/* Tip */}
                   {activeRecipe.tip && (
                     <div className="mx-3 mb-1.5 bg-amber-50 border border-amber-200 rounded-xl p-2">
                       <p className="text-[9px] font-bold text-amber-800 leading-snug">💡 {activeRecipe.tip}</p>
                     </div>
                   )}
-
-                  {/* Steps */}
                   <div className="px-3 pb-3 flex flex-col gap-1 max-h-36 overflow-y-auto">
                     <div className="text-[7px] font-black text-slate-400 uppercase tracking-wider mb-0.5">Шаги:</div>
                     {activeRecipe.steps.map((step, idx) => {
@@ -633,26 +749,31 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
         </div>
       )}
 
-      {/* Wrong dish notification */}
+      {/* ── Wrong dish notification ── */}
       <AnimatePresence>
         {wrongDishInfo && (
-          <motion.div
-            initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }}
-            exit={{ y: -40, opacity: 0 }}
-            className="absolute top-14 left-1/2 -translate-x-1/2 z-50 bg-rose-500 text-white rounded-2xl px-4 py-2.5 shadow-xl border-4 border-rose-300 text-center"
-          >
+          <motion.div initial={{ y: -40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -40, opacity: 0 }}
+            className="absolute top-24 left-1/2 -translate-x-1/2 z-50 bg-rose-500 text-white rounded-2xl px-4 py-2.5 shadow-xl border-4 border-rose-300 text-center pointer-events-none">
             <div className="text-xs font-black">😢 Не то блюдо!</div>
-            <div className="text-[10px] font-bold opacity-90">
-              Хотели: <span className="font-black">{wrongDishInfo.expected}</span>
-            </div>
-            <div className="text-[10px] font-bold opacity-90">
-              Получили: <span className="font-black">{wrongDishInfo.got}</span>
-            </div>
+            <div className="text-[10px] font-bold opacity-90">Хотели: <span className="font-black">{wrongDishInfo.expected}</span></div>
+            <div className="text-[10px] font-bold opacity-90">Получили: <span className="font-black">{wrongDishInfo.got}</span></div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* CUSTOMERS AREA */}
+      {/* ── Wave notification ── */}
+      <AnimatePresence>
+        {waveNotif && (
+          <motion.div initial={{ opacity: 0, scale: 0.7, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: -30 }} transition={{ type: 'spring', bounce: 0.5 }}
+            className="absolute top-1/3 left-1/2 -translate-x-1/2 z-50 bg-blue-500 text-white rounded-3xl px-6 py-3 font-black text-xl shadow-2xl text-center pointer-events-none border-4 border-blue-300">
+            {waveNotif}
+            <div className="text-xs font-bold opacity-80 mt-0.5">Гости стали нетерпеливее!</div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Customers area ── */}
       {mode !== 'free' ? (
         <div className="bg-amber-100 relative flex items-end pb-2 gap-3 px-4 overflow-x-auto overflow-y-hidden shrink-0 border-b-4 border-orange-300 shadow-inner"
           style={{ minHeight: '7.5rem', maxHeight: '10rem', WebkitOverflowScrolling: 'touch' }}>
@@ -681,7 +802,6 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
           )}
         </div>
       ) : (
-        /* FREE MODE — recipe picker bar */
         <div className="bg-orange-50 border-b-2 border-orange-200 shrink-0 px-3 py-2 flex items-center gap-2">
           {freeRecipeId && activeRecipe ? (
             <>
@@ -690,73 +810,54 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
                 <div className="text-[9px] font-black text-orange-600 uppercase">Практика</div>
                 <div className="text-xs font-black text-slate-800 truncate">{activeRecipe.name}</div>
               </div>
-              <button
-                onClick={() => { setFreeRecipeId(null); handleResetAll(); }}
-                className="text-[10px] font-black text-orange-500 bg-orange-100 border border-orange-300 px-2 py-1 rounded-xl active:scale-90"
-              >Сменить</button>
+              <button onClick={() => { setFreeRecipeId(null); handleResetAll(); }}
+                className="text-[10px] font-black text-orange-500 bg-orange-100 border border-orange-300 px-2 py-1 rounded-xl active:scale-90">
+                Сменить
+              </button>
             </>
           ) : (
             <>
               <span className="text-xl">👨‍🍳</span>
               <p className="flex-1 text-[11px] font-bold text-orange-700">Выбери рецепт для практики</p>
-              <button
-                onClick={() => setIsBookOpen(true)}
-                className="bg-orange-500 text-white font-black text-[11px] px-3 py-1.5 rounded-xl active:scale-90 shadow"
-              >📖 Выбрать</button>
+              <button onClick={() => setIsBookOpen(true)}
+                className="bg-orange-500 text-white font-black text-[11px] px-3 py-1.5 rounded-xl active:scale-90 shadow">
+                📖 Выбрать
+              </button>
             </>
           )}
         </div>
       )}
 
-      {/* NAV TABS */}
+      {/* ── Nav tabs ── */}
       <div className="flex justify-center px-2 py-1.5 bg-orange-50 gap-2 shrink-0 z-20 border-b border-orange-200">
-        <button
-          onClick={() => setActiveTab('kitchen')}
-          className={cn(
-            "flex-1 py-2 px-4 rounded-2xl font-black text-sm transition-all border-b-4 active:border-b-0 active:translate-y-0.5 flex items-center justify-center gap-1.5",
-            activeTab === 'kitchen'
-              ? 'bg-orange-500 text-white border-orange-700 shadow-md'
-              : 'bg-white text-slate-500 border-slate-200 hover:bg-orange-50'
-          )}
-        >
-          <Utensils className="w-4 h-4" /> Кухня
-        </button>
-        <button
-          onClick={() => setActiveTab('storage')}
-          className={cn(
-            "flex-1 py-2 px-4 rounded-2xl font-black text-sm transition-all border-b-4 active:border-b-0 active:translate-y-0.5 flex items-center justify-center gap-1.5",
-            activeTab === 'storage'
-              ? 'bg-blue-500 text-white border-blue-700 shadow-md'
-              : 'bg-white text-slate-500 border-slate-200 hover:bg-blue-50'
-          )}
-        >
-          ❄️ Склад
-        </button>
+        {(['kitchen', 'storage'] as const).map(tab => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={cn(
+              "flex-1 py-2 px-4 rounded-2xl font-black text-sm transition-all border-b-4 active:border-b-0 active:translate-y-0.5 flex items-center justify-center gap-1.5",
+              tab === 'kitchen'
+                ? activeTab === 'kitchen' ? 'bg-orange-500 text-white border-orange-700 shadow-md' : 'bg-white text-slate-500 border-slate-200'
+                : activeTab === 'storage' ? 'bg-blue-500 text-white border-blue-700 shadow-md' : 'bg-white text-slate-500 border-slate-200'
+            )}>
+            {tab === 'kitchen' ? <><Utensils className="w-4 h-4" /> Кухня</> : <>❄️ Склад</>}
+          </button>
+        ))}
       </div>
 
-      {/* MAIN AREA */}
+      {/* ── Main area ── */}
       <div className="flex-1 overflow-hidden flex flex-col relative z-10">
         {activeTab === 'kitchen' ? (
           <KitchenView
-            plate={plate}
-            prepItems={prepItems}
-            finishedDish={finishedDish}
-            onClearPlate={handleClearPlate}
-            onProcessItem={handleProcessItem}
+            plate={plate} prepItems={prepItems} finishedDish={finishedDish}
+            onClearPlate={handleClearPlate} onProcessItem={handleProcessItem}
             onAssembleItem={handleAssembleItem}
             onServe={mode === 'free' || waitingOrders.length > 0
               ? () => handleServe(waitingOrders.sort((a, b) => a.timeLeft - b.timeLeft)[0]?.id)
               : undefined}
-            plateFlash={plateFlash}
-            activeRecipe={activeRecipe ?? null}
-            onQuickPick={handleTakeIngredient}
-            stock={stock}
+            plateFlash={plateFlash} activeRecipe={activeRecipe ?? null}
+            onQuickPick={handleTakeIngredient} stock={stock}
           />
         ) : (
-          <StorageView
-            stock={stock}
-            onTake={handleTakeIngredient}
-          />
+          <StorageView stock={stock} onTake={handleTakeIngredient} />
         )}
       </div>
     </div>
