@@ -4,6 +4,7 @@ import { KitchenView } from './components/KitchenView';
 import { StorageView } from './components/StorageView';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { InstructionModal } from './components/InstructionModal';
+import { SelfReviewModal } from './components/SelfReviewModal';
 import { CHARACTERS, INGREDIENTS, RECIPES } from './data';
 import { IngredientType, Order, RecipeId, PrepItem } from './types';
 import { Coins, LogOut, BookOpen, Utensils, ChevronDown, ChevronUp, ShoppingBag, Zap, Clock, HelpCircle } from 'lucide-react';
@@ -59,6 +60,10 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
   // Bauka personality
   const [baukaPhase, setBaukaPhase] = useState<BaukaPhase>('idle');
   const [baukaDialog, setBaukaDialog] = useState<string | null>(null);
+
+  // Free mode: selected recipe to practice + review state
+  const [freeRecipeId, setFreeRecipeId] = useState<RecipeId | null>(null);
+  const [freeReviewOpen, setFreeReviewOpen] = useState(false);
 
   // Speed boost: timestamp until which boost is active
   const [speedBoostEnd, setSpeedBoostEnd] = useState<number | null>(null);
@@ -204,8 +209,8 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
       setTimeout(() => {
         setBaukaPhase('idle');
         setBaukaDialog(null);
-        // После любви — новый заказ Бауки
         setOrders([]);
+        handleResetAll();
       }, 3200);
     }, 700);
   };
@@ -258,7 +263,15 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
     setPrepItems(prev => prev.filter(i => i.id !== item.id));
   };
 
+  // Clears only the assembled plate — keeps cooking-in-progress items intact
   const handleClearPlate = () => {
+    setPlate([]);
+    setFinishedDish(null);
+    setWrongDishInfo(null);
+  };
+
+  // Full reset: plate + all prep items (used after serving)
+  const handleResetAll = () => {
     setPlate([]);
     setFinishedDish(null);
     setPrepItems([]);
@@ -270,7 +283,7 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
 
     if (mode === 'free') {
       setCoins(c => c + RECIPES[finishedDish].price);
-      handleClearPlate();
+      setFreeReviewOpen(true);
       return;
     }
 
@@ -330,7 +343,7 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
       }, 2400);
     }
 
-    handleClearPlate();
+    handleResetAll();
   };
 
   // Most urgent waiting order for hint / quick serve
@@ -338,12 +351,28 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
   const sortedWaiting = [...waitingOrders].sort((a, b) => a.timeLeft - b.timeLeft);
   const mostUrgentId = sortedWaiting[0]?.id ?? null;
   const activeOrder = sortedWaiting[0] ?? orders.find(o => o.status === 'eating');
-  const activeRecipe = activeOrder ? RECIPES[activeOrder.recipeId] : null;
+  // In free mode use selected practice recipe; in order modes use most urgent order
+  const activeRecipe = mode === 'free'
+    ? (freeRecipeId ? RECIPES[freeRecipeId] : null)
+    : (activeOrder ? RECIPES[activeOrder.recipeId] : null);
 
   return (
     <div className="w-full h-full flex flex-col bg-amber-50 overflow-hidden relative">
-      {isBookOpen && <RecipeBookModal onClose={() => setIsBookOpen(false)} />}
+      {isBookOpen && (
+        <RecipeBookModal
+          onClose={() => setIsBookOpen(false)}
+          onSelect={mode === 'free' ? (id) => { setFreeRecipeId(id as RecipeId); handleResetAll(); } : undefined}
+        />
+      )}
       {instructionOpen && <InstructionModal onClose={() => setInstructionOpen(false)} />}
+      {freeReviewOpen && activeRecipe && (
+        <SelfReviewModal
+          recipe={activeRecipe}
+          playerName={playerName}
+          onPlayAgain={() => { setFreeReviewOpen(false); handleResetAll(); }}
+          onChooseOther={() => { setFreeReviewOpen(false); setFreeRecipeId(null); handleResetAll(); setIsBookOpen(true); }}
+        />
+      )}
 
       {/* Shop Modal */}
       <AnimatePresence>
@@ -455,7 +484,10 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
         <button onClick={onQuit} className="p-2 bg-orange-600 rounded-full text-white active:scale-90 transition-transform shadow">
           <LogOut className="w-4 h-4" />
         </button>
-        <h1 className="text-base font-black text-white drop-shadow">🍽️ Кухня Бауки</h1>
+        <div className="flex flex-col items-center">
+          <h1 className="text-sm font-black text-white drop-shadow leading-none">🍽️ Кухня Бауки</h1>
+          <span className="text-[9px] font-bold text-orange-200 leading-none mt-0.5">👨‍🍳 {playerName}</span>
+        </div>
         <div className="flex items-center gap-1.5">
           {/* Speed boost indicator */}
           {speedBoostEnd && (
@@ -487,7 +519,7 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
       </div>
 
       {/* HINT — top-right corner */}
-      {activeRecipe && tutorialStep === 0 && mode !== 'free' && (
+      {activeRecipe && tutorialStep === 0 && (
         <div className="absolute top-14 right-1 w-44 z-40 pointer-events-auto">
           <motion.div
             initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
@@ -641,9 +673,30 @@ export function GameScreen({ onQuit, mode, playerName }: GameScreenProps) {
           )}
         </div>
       ) : (
-        <div className="h-16 bg-orange-100 relative flex flex-col justify-center items-center shrink-0 border-b-2 border-orange-200">
-          <div className="text-base font-black text-orange-700 flex items-center gap-2">👨‍🍳 Свободная Готовка</div>
-          <p className="text-[9px] font-bold text-orange-500 mt-0.5">Открой «100 Блюд» и экспериментируй!</p>
+        /* FREE MODE — recipe picker bar */
+        <div className="bg-orange-50 border-b-2 border-orange-200 shrink-0 px-3 py-2 flex items-center gap-2">
+          {freeRecipeId && activeRecipe ? (
+            <>
+              <span className="text-2xl">{activeRecipe.icon}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[9px] font-black text-orange-600 uppercase">Практика</div>
+                <div className="text-xs font-black text-slate-800 truncate">{activeRecipe.name}</div>
+              </div>
+              <button
+                onClick={() => { setFreeRecipeId(null); handleResetAll(); }}
+                className="text-[10px] font-black text-orange-500 bg-orange-100 border border-orange-300 px-2 py-1 rounded-xl active:scale-90"
+              >Сменить</button>
+            </>
+          ) : (
+            <>
+              <span className="text-xl">👨‍🍳</span>
+              <p className="flex-1 text-[11px] font-bold text-orange-700">Выбери рецепт для практики</p>
+              <button
+                onClick={() => setIsBookOpen(true)}
+                className="bg-orange-500 text-white font-black text-[11px] px-3 py-1.5 rounded-xl active:scale-90 shadow"
+              >📖 Выбрать</button>
+            </>
+          )}
         </div>
       )}
 

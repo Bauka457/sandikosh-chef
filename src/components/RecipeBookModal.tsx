@@ -7,6 +7,7 @@ import { X, Search } from 'lucide-react';
 
 interface Props {
   onClose: () => void;
+  onSelect?: (recipeId: string) => void; // free mode: pick recipe to practice
 }
 
 const CATEGORY_LABELS: Record<RecipeCategory, string> = {
@@ -51,7 +52,7 @@ const allCategories: RecipeCategory[] = [
   'healthy', 'breakfast', 'sweet', 'bakery', 'asian', 'russian', 'mexican',
 ];
 
-export function RecipeBookModal({ onClose }: Props) {
+export function RecipeBookModal({ onClose, onSelect }: Props) {
   const [selectedCategory, setSelectedCategory] = useState<RecipeCategory | 'all'>('all');
   const [search, setSearch] = useState('');
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -161,6 +162,7 @@ export function RecipeBookModal({ onClose }: Props) {
                 recipe={recipe}
                 expanded={expanded === recipe.id}
                 onToggle={() => setExpanded(expanded === recipe.id ? null : recipe.id)}
+                onSelect={onSelect ? () => { onSelect(recipe.id); onClose(); } : undefined}
               />
             </div>
           ))}
@@ -170,7 +172,9 @@ export function RecipeBookModal({ onClose }: Props) {
   );
 }
 
-function RecipeCard({ recipe, expanded, onToggle }: { recipe: Recipe; expanded: boolean; onToggle: () => void }) {
+function RecipeCard({ recipe, expanded, onToggle, onSelect }: {
+  recipe: Recipe; expanded: boolean; onToggle: () => void; onSelect?: () => void;
+}) {
   return (
     <motion.div
       layout
@@ -284,6 +288,16 @@ function RecipeCard({ recipe, expanded, onToggle }: { recipe: Recipe; expanded: 
                   })}
                 </div>
               </div>
+
+              {/* Practice button — only in free mode */}
+              {onSelect && (
+                <button
+                  onClick={onSelect}
+                  className="w-full py-2.5 bg-orange-500 text-white font-black rounded-2xl text-sm active:scale-95 border-b-4 border-orange-700 shadow flex items-center justify-center gap-2"
+                >
+                  ▶ Практиковать это блюдо
+                </button>
+              )}
             </div>
           </motion.div>
         )}
