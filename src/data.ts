@@ -1223,16 +1223,57 @@ export const RECIPES: Record<string, Recipe> = {
   },
 };
 
+// Типизированные id персонажей — чтобы не дублировать строки по проекту
+export const CHARACTER_IDS = {
+  CAT: 'cat',
+  BAUKA: 'bauka',
+  DOG: 'dog',
+  RABBIT: 'rabbit',
+  BEAR: 'bear',
+  FOX: 'fox',
+  PANDA: 'panda',
+  KOALA: 'koala',
+  TIGER: 'tiger',
+  LION: 'lion',
+  PIG: 'pig',
+} as const;
+
 export const CHARACTERS: Character[] = [
-  { id: 'cat', name: 'Кот', animal: '😸', color: 'bg-orange-500', type: 'meat' },
-  { id: 'bauka', name: 'Баука', animal: '😽', color: 'bg-rose-500', type: 'meat' },
-  { id: 'dog', name: 'Пёс', animal: '🐶', color: 'bg-amber-700', type: 'meat' },
-  { id: 'rabbit', name: 'Кролик', animal: '🐰', color: 'bg-rose-400', type: 'healthy' },
-  { id: 'bear', name: 'Мишка', animal: '🐻', color: 'bg-stone-600', type: 'sweet' },
-  { id: 'fox', name: 'Лиса', animal: '🦊', color: 'bg-orange-600', type: 'universal' },
-  { id: 'panda', name: 'Панда', animal: '🐼', color: 'bg-slate-800', type: 'healthy' },
-  { id: 'koala', name: 'Коала', animal: '🐨', color: 'bg-slate-500', type: 'sweet' },
-  { id: 'tiger', name: 'Тигр', animal: '🐯', color: 'bg-orange-400', type: 'meat' },
-  { id: 'lion', name: 'Лев', animal: '🦁', color: 'bg-amber-500', type: 'meat' },
-  { id: 'pig', name: 'Свинка', animal: '🐷', color: 'bg-pink-400', type: 'universal' },
+  { id: CHARACTER_IDS.CAT, name: 'Кот', animal: '😸', color: 'bg-orange-500', type: 'meat' },
+  { id: CHARACTER_IDS.BAUKA, name: 'Баука', animal: '😽', color: 'bg-rose-500', type: 'meat' },
+  { id: CHARACTER_IDS.DOG, name: 'Пёс', animal: '🐶', color: 'bg-amber-700', type: 'meat' },
+  { id: CHARACTER_IDS.RABBIT, name: 'Кролик', animal: '🐰', color: 'bg-rose-400', type: 'healthy' },
+  { id: CHARACTER_IDS.BEAR, name: 'Мишка', animal: '🐻', color: 'bg-stone-600', type: 'sweet' },
+  { id: CHARACTER_IDS.FOX, name: 'Лиса', animal: '🦊', color: 'bg-orange-600', type: 'universal' },
+  { id: CHARACTER_IDS.PANDA, name: 'Панда', animal: '🐼', color: 'bg-slate-800', type: 'healthy' },
+  { id: CHARACTER_IDS.KOALA, name: 'Коала', animal: '🐨', color: 'bg-slate-500', type: 'sweet' },
+  { id: CHARACTER_IDS.TIGER, name: 'Тигр', animal: '🐯', color: 'bg-orange-400', type: 'meat' },
+  { id: CHARACTER_IDS.LION, name: 'Лев', animal: '🦁', color: 'bg-amber-500', type: 'meat' },
+  { id: CHARACTER_IDS.PIG, name: 'Свинка', animal: '🐷', color: 'bg-pink-400', type: 'universal' },
+];
+
+// Реплики Бауки — становятся всё более «преданными» по мере подачи блюд
+export const BAUKA_PHRASES: string[] = [
+  'ВАУ! Это лучшая еда в моей жизни! 🤩',
+  'Ммм, нереально вкусно! Давай ещё! 😋',
+  'Я в жизни не ел ничего вкуснее! 😍',
+  'Ты мой любимый шеф на свете! 💖',
+  'Это пальчики оближешь, шедевр! 👌',
+  'Я расскажу о тебе всем друзьям! 🌟',
+  'Это пир богов, не меньше! 👑',
+  'Я твой фанат №1 навсегда! 🐻💕',
+  'Каждое блюдо — настоящий шедевр! 🎨',
+  'Ты готовишь как волшебник! ✨',
+  'Я бы ел твою стряпню вечно! ♾️',
+  'БРАВИССИМО, маэстро кухни! 👏',
+];
+
+// Баука притворяется недовольным (каждое 3-е блюдо) — придирается к вкусу,
+// пока не получит «чапалак».
+export const BAUKA_DISLIKE_PHRASES: string[] = [
+  'Фу… какой-то привкус не такой… 🤢',
+  'Мм, чего-то не хватает… не очень 😒',
+  'Хм… соли маловато, что ли? 🤨',
+  'Не-е, сегодня как-то не айс… 😕',
+  'Привкус странный какой-то… 🤢',
 ];

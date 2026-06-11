@@ -60,6 +60,8 @@ export interface Order {
   maxTime: number;
   status: 'waiting' | 'eating' | 'leaving' | 'done';
   reaction?: 'wow' | 'bauka_wow' | 'sad' | 'good';
+  specialRequest?: 'extra_hot' | 'no_spice' | 'large_portion';
+  tip?: number; // бонус за выполнение спецзапроса
 }
 
 export interface PrepItem {

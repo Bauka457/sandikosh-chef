@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
 import { ArrowLeft, Save, Trash2 } from 'lucide-react';
-import { Profile, AVATARS, saveProfile, DEFAULT_PROFILE } from './profile';
+import { Profile, AVATARS, saveProfile, DEFAULT_PROFILE, ACHIEVEMENTS } from './profile';
 import { cn } from './utils';
 
 interface Props {
@@ -114,6 +114,33 @@ export function ProfileScreen({ profile, onSave, onBack, isSetup }: Props) {
                   <div className="text-[9px] font-bold text-slate-400">{stat.label}</div>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Achievements (only if not setup) */}
+        {!isSetup && (
+          <div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-amber-100">
+            <div className="text-[10px] font-black text-amber-700 uppercase tracking-wider mb-3">
+              Достижения · {Object.keys(profile.achievements ?? {}).length}/{ACHIEVEMENTS.length}
+            </div>
+            <div className="flex flex-col gap-2">
+              {ACHIEVEMENTS.map(a => {
+                const unlocked = !!profile.achievements?.[a.id];
+                return (
+                  <div key={a.id} className={cn(
+                    "flex items-center gap-3 rounded-xl p-2.5 border",
+                    unlocked ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100 opacity-60'
+                  )}>
+                    <div className={cn("text-2xl", !unlocked && 'grayscale')}>{a.icon}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-black text-slate-800">{a.name}</div>
+                      <div className="text-[10px] font-bold text-slate-400 leading-tight">{a.description}</div>
+                    </div>
+                    {unlocked && <div className="text-emerald-500 font-black text-sm shrink-0">✓</div>}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

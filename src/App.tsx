@@ -46,7 +46,13 @@ export default function App() {
 
   return (
     <div className="w-full h-dvh bg-neutral-900 flex justify-center items-center overflow-hidden font-sans">
-      <div className="w-full max-w-107 h-full bg-white shadow-2xl relative overflow-hidden flex flex-col">
+      <div
+        className="w-full max-w-107 h-full bg-white shadow-2xl relative overflow-hidden flex flex-col"
+        style={{
+          paddingTop: 'var(--safe-top)',
+          paddingBottom: 'var(--safe-bottom)',
+        }}
+      >
         {screen === 'setup' && (
           <ProfileScreen
             profile={profile}
@@ -60,6 +66,7 @@ export default function App() {
             profile={profile}
             onStart={handleStart}
             onEditProfile={() => setScreen('profile')}
+            onProfileUpdate={setProfile}
           />
         )}
         {screen === 'profile' && (

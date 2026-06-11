@@ -3,7 +3,8 @@ import { IngredientType, Recipe, RecipeId, PrepItem, ProcessType } from '../type
 import { motion, AnimatePresence } from 'motion/react';
 import { Trash2, Flame } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import { cn } from '../utils';
+import { cn, haptic } from '../utils';
+import { playSound } from '../sound';
 
 interface Props {
   plate: IngredientType[];
@@ -11,6 +12,8 @@ interface Props {
   finishedDish: RecipeId | null;
   onClearPlate: () => void;
   onProcessItem: (id: string, action: ProcessType, amount: number) => void;
+  onStoveRelease: (id: string) => void;
+  onDiscardItem: (id: string) => void;
   onAssembleItem: (item: PrepItem) => void;
   onServe?: () => void;
   plateFlash: 'good' | 'bad' | null;
@@ -21,7 +24,7 @@ interface Props {
 
 export function KitchenView({
   plate, prepItems, finishedDish,
-  onClearPlate, onProcessItem, onAssembleItem, onServe,
+  onClearPlate, onProcessItem, onStoveRelease, onDiscardItem, onAssembleItem, onServe,
   plateFlash, activeRecipe, onQuickPick, stock,
 }: Props) {
   const dish = finishedDish ? RECIPES[finishedDish] : null;
@@ -43,10 +46,34 @@ export function KitchenView({
     if (newlyReady.length > 0) {
       const ids = new Set(newlyReady.map(i => i.id));
       setJustReadyIds(ids);
+      haptic.medium();
+      playSound('ding');
       setTimeout(() => setJustReadyIds(new Set()), 700);
     }
     prevPrepRef.current = prepItems;
   }, [prepItems]);
+
+  // ── Hold-to-cook intervals (плита) ──
+  const holdIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+  useEffect(() => {
+    const intervals = holdIntervalsRef.current;
+    return () => { intervals.forEach(clearInterval); intervals.clear(); };
+  }, []);
+
+  // Если блюдо сгорело или снято с плиты — остановить его интервал
+  useEffect(() => {
+    holdIntervalsRef.current.forEach((interval, id) => {
+      const item = prepItems.find(p => p.id === id);
+      if (!item || item.state === 'burned' || item.state === 'ready') {
+        clearInterval(interval);
+        holdIntervalsRef.current.delete(id);
+      }
+    });
+  }, [prepItems]);
+
+  // ── Swipe state (разделочная) ──
+  const swipeStartRef = useRef<Map<string, number>>(new Map()); // id → последний x
+  const didSwipeRef = useRef(false);
 
   const stoveItems = prepItems.filter(
     item => (INGREDIENTS[item.ingredientId].process === 'cook' || INGREDIENTS[item.ingredientId].process === 'boil') && item.state !== 'ready'
@@ -71,6 +98,7 @@ export function KitchenView({
     const handleCut = (amount: number) => {
       setKnifeFlash(item.id);
       setTimeout(() => setKnifeFlash(null), 280);
+      playSound('chop');
       onProcessItem(item.id, 'cut', amount);
     };
     return (
@@ -78,9 +106,29 @@ export function KitchenView({
         key={item.id}
         initial={{ scale: 0, y: -20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0 }}
         className="relative flex flex-col items-center justify-center p-2 cursor-pointer select-none"
-        onClick={() => handleCut(22)}
-        onPointerMove={e => { if (e.buttons === 1) handleCut(5); }}
-        style={{ touchAction: 'none' }}
+        onClick={() => {
+          // Тап — запасной вариант; если был свайп, клик не засчитываем повторно
+          if (didSwipeRef.current) { didSwipeRef.current = false; return; }
+          handleCut(22);
+        }}
+        onPointerDown={e => {
+          swipeStartRef.current.set(item.id, e.clientX);
+          didSwipeRef.current = false;
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={e => {
+          const startX = swipeStartRef.current.get(item.id);
+          if (startX === undefined || e.buttons !== 1) return;
+          if (Math.abs(e.clientX - startX) > 20) {
+            handleCut(30); // свайп ножом — больше прогресса, чем тап
+            swipeStartRef.current.set(item.id, e.clientX);
+            didSwipeRef.current = true;
+            haptic.light();
+          }
+        }}
+        onPointerUp={() => swipeStartRef.current.delete(item.id)}
+        onPointerCancel={() => swipeStartRef.current.delete(item.id)}
+        style={{ touchAction: 'none', minWidth: 56, minHeight: 56 }}
       >
         {/* Knife animation */}
         <AnimatePresence>
@@ -133,19 +181,37 @@ export function KitchenView({
     );
   };
 
-  // ── STOVE ITEM ──
+  // ── STOVE ITEM (зажми и держи; отпусти вовремя — не пережарь!) ──
   const renderStoveItem = (item: PrepItem) => {
     const isBoil = INGREDIENTS[item.ingredientId].process === 'boil';
     const isShaking = panShake === item.id;
     const isSteaming = steamId === item.id;
     const isProcessing = item.state === 'processing';
+    const isBurned = item.state === 'burned';
+    const isOverheating = isProcessing && item.progress >= 100;
 
-    const handleCook = () => {
+    const startCooking = () => {
+      if (isBurned || holdIntervalsRef.current.has(item.id)) return;
+      haptic.light();
+      playSound('sizzle');
       setPanShake(item.id);
       setSteamId(item.id);
       setTimeout(() => setPanShake(null), 380);
       setTimeout(() => setSteamId(null), 750);
-      onProcessItem(item.id, INGREDIENTS[item.ingredientId].process, 25);
+      const process = INGREDIENTS[item.ingredientId].process;
+      onProcessItem(item.id, process, 6);
+      holdIntervalsRef.current.set(item.id, setInterval(() => {
+        onProcessItem(item.id, process, 6);
+      }, 130));
+    };
+
+    const stopCooking = () => {
+      const interval = holdIntervalsRef.current.get(item.id);
+      if (interval) {
+        clearInterval(interval);
+        holdIntervalsRef.current.delete(item.id);
+      }
+      onStoveRelease(item.id);
     };
 
     return (
@@ -153,11 +219,19 @@ export function KitchenView({
         key={item.id}
         initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
         className={cn(
-          "relative flex flex-col items-center justify-center p-2 rounded-xl cursor-pointer select-none border-2",
-          isBoil ? 'bg-blue-100 border-blue-300' : 'bg-orange-100 border-orange-300'
+          "relative flex flex-col items-center justify-center p-2 rounded-xl cursor-pointer select-none border-2 transition-colors",
+          isBurned ? 'bg-slate-200 border-slate-400'
+            : isOverheating ? 'bg-rose-100 border-rose-400'
+            : isBoil ? 'bg-blue-100 border-blue-300' : 'bg-orange-100 border-orange-300'
         )}
-        onClick={handleCook}
-        style={{ touchAction: 'none' }}
+        onClick={isBurned ? () => { haptic.medium(); onDiscardItem(item.id); } : undefined}
+        onPointerDown={isBurned ? undefined : e => {
+          e.currentTarget.setPointerCapture(e.pointerId);
+          startCooking();
+        }}
+        onPointerUp={isBurned ? undefined : stopCooking}
+        onPointerCancel={isBurned ? undefined : stopCooking}
+        style={{ touchAction: 'none', minWidth: 56, minHeight: 56 }}
       >
         {/* Continuous ambient steam when processing */}
         {isProcessing && [0, 1, 2].map(i => (
@@ -202,25 +276,43 @@ export function KitchenView({
           }}
           className={cn(
             "text-4xl select-none z-10",
-            item.state === 'raw' ? 'grayscale brightness-75' : isProcessing ? 'drop-shadow-[0_0_6px_rgba(251,146,60,0.8)]' : ''
+            isBurned ? 'grayscale brightness-50 contrast-125'
+              : item.state === 'raw' ? 'grayscale brightness-75'
+              : isProcessing ? 'drop-shadow-[0_0_6px_rgba(251,146,60,0.8)]' : ''
           )}
         >
           {INGREDIENTS[item.ingredientId].icon}
         </motion.div>
 
-        {item.progress > 0 && item.progress < 100 && (
+        {!isBurned && item.progress > 0 && (
           <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5">
-            <div className="w-10 h-2 bg-orange-200 rounded-full overflow-hidden">
-              <motion.div className="h-full bg-orange-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
+            <div className={cn("w-10 h-2 rounded-full overflow-hidden", isOverheating ? 'bg-rose-200' : 'bg-orange-200')}>
+              <motion.div
+                className={cn("h-full rounded-full", isOverheating ? 'bg-rose-600' : 'bg-orange-500')}
+                animate={{ width: `${Math.min(100, item.progress)}%` }} transition={{ duration: 0.15 }} />
             </div>
-            <span className="text-[7px] font-black text-orange-700 leading-none">{Math.round(item.progress)}%</span>
+            <span className={cn("text-[7px] font-black leading-none", isOverheating ? 'text-rose-700' : 'text-orange-700')}>
+              {Math.min(100, Math.round(item.progress))}%
+            </span>
           </div>
         )}
         {item.state === 'raw' && (
           <motion.div
             animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 1.2 }}
             className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow"
-          >Тапай!</motion.div>
+          >Держи! ☝️</motion.div>
+        )}
+        {isOverheating && (
+          <motion.div
+            animate={{ scale: [1, 1.15, 1] }} transition={{ repeat: Infinity, duration: 0.3 }}
+            className="absolute -top-3 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow z-20"
+          >🔥 СНИМАЙ!</motion.div>
+        )}
+        {isBurned && (
+          <motion.div
+            animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 1.2 }}
+            className="absolute -top-3 left-1/2 -translate-x-1/2 bg-slate-700 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow z-20"
+          >Сгорело! Тапни 🗑️</motion.div>
         )}
       </motion.div>
     );
@@ -235,7 +327,7 @@ export function KitchenView({
         initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
         className="relative flex flex-col items-center justify-center p-2 rounded-xl cursor-pointer border-2 bg-red-50 border-red-300"
         onClick={() => onProcessItem(item.id, 'bake', 18)}
-        style={{ touchAction: 'none' }}
+        style={{ touchAction: 'none', minWidth: 56, minHeight: 56 }}
       >
         {/* Heat shimmer */}
         <motion.div
@@ -285,7 +377,7 @@ export function KitchenView({
         className="relative flex flex-col items-center justify-center p-2 rounded-xl cursor-pointer border-2 bg-blue-50 border-blue-300"
         onClick={() => handleMix(22)}
         onPointerMove={e => { if (e.buttons === 1) handleMix(5); }}
-        style={{ touchAction: 'none' }}
+        style={{ touchAction: 'none', minWidth: 56, minHeight: 56 }}
       >
         <motion.div
           animate={
@@ -328,7 +420,7 @@ export function KitchenView({
     <div className="flex-1 flex flex-col bg-amber-50 relative overflow-hidden">
 
       {/* 2×2 Station Grid — fixed height so assembly always has room */}
-      <div className="grid grid-cols-2 gap-1.5 p-1.5 shrink-0" style={{ height: '45%', minHeight: 160, maxHeight: 220 }}>
+      <div className="grid grid-cols-2 gap-1.5 p-1.5 shrink-0" style={{ height: '48%', minHeight: 190, maxHeight: 260 }}>
 
         {/* CUTTING BOARD */}
         <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-amber-500 shadow-md"
@@ -411,7 +503,7 @@ export function KitchenView({
       </div>
 
       {/* Quick Pick Bar */}
-      {activeRecipe && (
+      {activeRecipe ? (
         <div className="bg-white border-y-2 border-amber-200 px-2 py-1 flex items-center gap-1.5 overflow-x-auto shrink-0 shadow-sm"
           style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="text-[9px] font-black text-amber-700 uppercase tracking-wide shrink-0 my-auto">
@@ -447,13 +539,27 @@ export function KitchenView({
             );
           })}
         </div>
+      ) : (
+        /* Free mode без рецепта: показываем все ингредиенты, чтобы было понятно как готовить */
+        <div className="bg-white border-y-2 border-amber-200 px-2 py-1 flex items-center gap-1.5 overflow-x-auto shrink-0 shadow-sm"
+          style={{ WebkitOverflowScrolling: 'touch' }}>
+          <div className="text-[9px] font-black text-amber-700 uppercase tracking-wide shrink-0 my-auto">Все:</div>
+          {Object.values(INGREDIENTS).map(ing => (
+            <button key={ing.id} onClick={() => onQuickPick(ing.id)}
+              disabled={(stock[ing.id] ?? 0) <= 0}
+              title={ing.name}
+              className="flex items-center px-2 py-0.5 rounded-xl border-2 shrink-0 border-amber-400 bg-white shadow-sm active:scale-90 disabled:opacity-30 disabled:grayscale">
+              <span className="text-lg leading-none">{ing.icon}</span>
+            </button>
+          ))}
+        </div>
       )}
 
       {/* Assembly Zone */}
       <div className="flex-1 bg-white rounded-t-2xl border-t-2 border-amber-200 flex gap-2 p-2 min-h-0 shadow-inner overflow-hidden">
 
         {/* Ready items column */}
-        <div className="w-14 border-r-2 border-amber-100 flex flex-col items-center gap-1 py-1 overflow-y-auto shrink-0"
+        <div className="w-16 border-r-2 border-amber-100 flex flex-col items-center gap-1 py-1 overflow-y-auto shrink-0"
           style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="text-[7px] font-black text-amber-700 uppercase tracking-wide mb-0.5">Готово</div>
           <AnimatePresence>
@@ -469,9 +575,10 @@ export function KitchenView({
                   exit={{ scale: 0 }}
                   transition={isJustReady ? { duration: 0.5, times: [0, 0.3, 0.55, 0.8, 1] } : { duration: 0.2 }}
                   className={cn(
-                    "relative bg-amber-50 border-2 border-amber-300 rounded-xl p-1.5 cursor-pointer text-2xl active:scale-90 transition-transform shadow-sm",
+                    "relative bg-amber-50 border-2 border-amber-300 rounded-xl p-2 cursor-pointer text-3xl active:scale-90 transition-transform shadow-sm flex items-center justify-center",
                     isJustReady && 'ring-2 ring-emerald-400 ring-offset-1'
                   )}
+                  style={{ minWidth: 44, minHeight: 44 }}
                   onClick={() => onAssembleItem(item)}
                   whileTap={{ scale: 0.82 }}
                 >
@@ -547,16 +654,20 @@ export function KitchenView({
                     transition={{ repeat: Infinity, duration: 1.5 }}
                     className="text-6xl drop-shadow-xl"
                   >{dish.icon}</motion.div>
-                  {onServe && (
-                    <motion.button
-                      animate={{ scale: [1, 1.05, 1] }}
-                      transition={{ repeat: 2, duration: 1.2 }}
-                      onClick={onServe}
-                      className="bg-emerald-500 text-white rounded-full px-4 py-2 font-black text-sm shadow-lg active:scale-95 border-4 border-emerald-300 whitespace-nowrap"
-                    >
-                      🍽️ ПОДАТЬ!
-                    </motion.button>
-                  )}
+                  <motion.button
+                    animate={onServe ? { scale: [1, 1.05, 1] } : {}}
+                    transition={{ repeat: 2, duration: 1.2 }}
+                    onClick={onServe}
+                    disabled={!onServe}
+                    className={cn(
+                      "rounded-full px-4 py-2 font-black text-sm shadow-lg border-4 whitespace-nowrap",
+                      onServe
+                        ? "bg-emerald-500 text-white border-emerald-300 active:scale-95"
+                        : "bg-slate-200 text-slate-400 border-slate-100 cursor-not-allowed"
+                    )}
+                  >
+                    {onServe ? '🍽️ ПОДАТЬ!' : '⏳ Нет заказов'}
+                  </motion.button>
                 </motion.div>
               ) : (
                 <div className="relative w-28 h-40 flex flex-col items-center justify-end pb-2">

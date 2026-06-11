@@ -5,12 +5,17 @@ import { StorageView } from './components/StorageView';
 import { RecipeBookModal } from './components/RecipeBookModal';
 import { InstructionModal } from './components/InstructionModal';
 import { SelfReviewModal } from './components/SelfReviewModal';
-import { CHARACTERS, INGREDIENTS, RECIPES } from './data';
+import { CHARACTERS, CHARACTER_IDS, BAUKA_PHRASES, BAUKA_DISLIKE_PHRASES, INGREDIENTS, RECIPES } from './data';
 import { IngredientType, Order, RecipeId, PrepItem } from './types';
-import { addSessionStats } from './profile';
+import {
+  addSessionStats, loadProfile, DEFAULT_UPGRADES,
+  ACHIEVEMENTS, unlockAchievement, updateDailyProgress, type DailyChallengeType,
+} from './profile';
+import { playSound } from './sound';
 import { Coins, LogOut, BookOpen, Utensils, ChevronDown, ChevronUp, ShoppingBag, Zap, Clock, HelpCircle } from 'lucide-react';
 import { type BaukaPhase } from './components/CustomerCard';
-import { cn } from './utils';
+import { ComboToast } from './components/ComboToast';
+import { cn, haptic } from './utils';
 import { motion, AnimatePresence } from 'motion/react';
 
 const checkRecipeCompletion = (plate: IngredientType[]): RecipeId | null => {
@@ -40,6 +45,11 @@ const DONENESS_LABEL: Record<string, string> = {
 const DIFFICULTY_LABEL: Record<number, string> = { 1: '⭐ Легко', 2: '⭐⭐ Средне', 3: '⭐⭐⭐ Сложно' };
 const MAX_CONCURRENT = 3;
 const MAX_LIVES = 3;
+const WAVE_GOAL = 5;          // блюд для перехода на следующую волну
+const OVERHEAT_LIMIT = 125;   // progress, при котором блюдо сгорает на плите
+const SPECIAL_REQUESTS = ['extra_hot', 'no_spice', 'large_portion'] as const;
+const BAUKA_TARGET = 5;       // блюд в серии для Бауки
+const BAUKA_FINALE_BONUS = 150;
 
 export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍🍳' }: GameScreenProps) {
   // ── Session stats + save-once refs ──
@@ -59,17 +69,56 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
     return id;
   };
 
+  // ── Апгрейды кухни (куплены в меню, читаются один раз на сессию) ──
+  const [upgrades] = useState(() => loadProfile()?.upgrades ?? { ...DEFAULT_UPGRADES });
+  const maxLives = MAX_LIVES + (upgrades.extraLife > 0 ? 1 : 0);
+  const overheatLimit = OVERHEAT_LIMIT + upgrades.heatControl * 10;
+  const knifeMultiplier = 1 + upgrades.fasterKnife * 0.2;
+
   // ── Lives & game over ──
-  const [lives, setLives] = useState(MAX_LIVES);
+  const [lives, setLives] = useState(maxLives);
   const [gameOver, setGameOver] = useState(false);
+
+  // ── Тосты разблокировок (достижения, задание дня) ──
+  const [unlockToasts, setUnlockToasts] = useState<{ key: number; icon: string; title: string; sub?: string }[]>([]);
+  const nextToastKey = useRef(1);
+  const pushUnlockToast = (icon: string, title: string, sub?: string) => {
+    const key = nextToastKey.current++;
+    setUnlockToasts(prev => [...prev, { key, icon, title, sub }]);
+    safeTimeout(() => setUnlockToasts(prev => prev.filter(t => t.key !== key)), 3000);
+  };
+
+  const tryUnlock = (id: string) => {
+    if (!unlockAchievement(id)) return;
+    const a = ACHIEVEMENTS.find(x => x.id === id);
+    if (a) {
+      pushUnlockToast(a.icon, `Достижение: ${a.name}`, a.description);
+      haptic.success();
+      playSound('ding');
+    }
+  };
+
+  const bumpDaily = (type: DailyChallengeType, value: number) => {
+    const res = updateDailyProgress(type, value);
+    if (res?.justCompleted) {
+      pushUnlockToast('📅', 'Задание дня выполнено!', `+${res.challenge.reward} монет в копилку`);
+      haptic.success();
+      playSound('combo');
+    }
+  };
+
+  // Разные блюда за сессию (для достижения «Шеф-повар»)
+  const distinctRecipesRef = useRef<Set<string>>(new Set());
 
   // ── Combo ──
   const [combo, setCombo] = useState(0);
   const [bestCombo, setBestCombo] = useState(0);
+  const [comboToast, setComboToast] = useState<number | null>(null);
 
   // ── Wave progression (guests mode) ──
   const [wave, setWave] = useState(1);
   const [waveNotif, setWaveNotif] = useState<string | null>(null);
+  const [waveDishes, setWaveDishes] = useState(0); // блюд подано в текущей волне (цель: WAVE_GOAL)
   const waveServedRef = useRef(0);
   const waveRef = useRef(1);
   useEffect(() => { waveRef.current = wave; }, [wave]);
@@ -87,6 +136,10 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
   // ── Bauka ──
   const [baukaPhase, setBaukaPhase] = useState<BaukaPhase>('idle');
   const [baukaDialog, setBaukaDialog] = useState<string | null>(null);
+  const [baukaServed, setBaukaServed] = useState(0);   // подано блюд в серии
+  const [baukaFinale, setBaukaFinale] = useState(false);
+  const baukaServedRef = useRef(0);
+  useEffect(() => { baukaServedRef.current = baukaServed; }, [baukaServed]);
 
   // ── Free mode ──
   const [freeRecipeId, setFreeRecipeId] = useState<RecipeId | null>(null);
@@ -144,18 +197,24 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lives]);
 
+  // ── Bauka finale → persist session (refs are fresh post-render) ──
+  useEffect(() => {
+    if (baukaFinale) saveSession();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baukaFinale]);
+
   // ── Auto-spawn orders ──
   useEffect(() => {
     if (tutorialStep > 0 || gameOver) return;
     if (mode === 'bauka') {
-      if (orders.length === 0) {
+      if (orders.length === 0 && !baukaFinale && baukaServed < BAUKA_TARGET) {
         const baukaIds = Object.keys(RECIPES).filter(id =>
           ['fastfood', 'meat'].includes(RECIPES[id].category)
         );
         const recipeId = baukaIds[Math.floor(Math.random() * baukaIds.length)] as RecipeId;
         setOrders([{
           id: `order-${nextOrderId.current++}`,
-          characterId: 'bauka', recipeId,
+          characterId: CHARACTER_IDS.BAUKA, recipeId,
           maxTime: 999, timeLeft: 999, status: 'waiting',
         }]);
       }
@@ -168,7 +227,7 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
     const t = setTimeout(() => spawnCustomer(waveRef.current), delay);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tutorialStep, orders, mode, gameOver]);
+  }, [tutorialStep, orders, mode, gameOver, baukaFinale, baukaServed]);
 
   // ── Auto-dismiss wrong dish notification ──
   useEffect(() => {
@@ -198,6 +257,7 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
         if (newTime <= 0) {
           setLives(l => l - 1);
           setCombo(0);
+          haptic.error();
           setTimeout(() => setOrders(c => c.filter(x => x.id !== o.id)), 2200);
           return { ...o, timeLeft: 0, status: 'eating', reaction: 'sad' };
         }
@@ -208,9 +268,9 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
   }, [mode, tutorialStep, gameOver]);
 
   const spawnCustomer = (currentWave: number) => {
-    const validChars = CHARACTERS.filter(c => c.id !== 'bauka');
+    const validChars = CHARACTERS.filter(c => c.id !== CHARACTER_IDS.BAUKA);
     const char = validChars[Math.floor(Math.random() * validChars.length)];
-    const minTime = Math.max(40, 90 - (currentWave - 1) * 5);
+    const minTime = Math.max(40, 90 - (currentWave - 1) * 5) + upgrades.patience * 10;
     let recipePool = Object.keys(RECIPES) as RecipeId[];
     if (currentWave >= 3 && Math.random() < 0.4) {
       const harder = recipePool.filter(id => (RECIPES[id].difficulty ?? 1) >= 2);
@@ -221,9 +281,17 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
       if (hardest.length > 0) recipePool = hardest;
     }
     const recipeId = recipePool[Math.floor(Math.random() * recipePool.length)];
+    const hasSpecialRequest = Math.random() < 0.35;
     setOrders(prev => [
       ...prev.filter(o => o.status !== 'done'),
-      { id: `order-${nextOrderId.current++}`, characterId: char.id, recipeId, maxTime: minTime, timeLeft: minTime, status: 'waiting' },
+      {
+        id: `order-${nextOrderId.current++}`, characterId: char.id, recipeId,
+        maxTime: minTime, timeLeft: minTime, status: 'waiting',
+        specialRequest: hasSpecialRequest
+          ? SPECIAL_REQUESTS[Math.floor(Math.random() * SPECIAL_REQUESTS.length)]
+          : undefined,
+        tip: hasSpecialRequest ? Math.floor(Math.random() * 15) + 10 : 0,
+      },
     ]);
   };
 
@@ -240,29 +308,73 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
 
   const handleProcessItem = (id: string, action: import('./types').ProcessType, amount: number) => {
     const boosted = speedBoostEnd !== null && Date.now() < speedBoostEnd;
-    const finalAmount = boosted ? amount * 2 : amount;
+    let finalAmount = boosted ? amount * 2 : amount;
+    if (action === 'cut' || action === 'mix') finalAmount *= knifeMultiplier; // апгрейд «Острее нож»
     setPrepItems(prev => prev.map(item => {
-      if (item.id !== id) return item;
+      if (item.id !== id || item.state === 'burned') return item;
       const ing = INGREDIENTS[item.ingredientId];
       const max = ing.processRequired || 100;
+      // Плита (cook/boil): прогресс идёт дальше 100 — отпусти вовремя, иначе сгорит.
+      // После 100 жар растёт медленнее, чтобы окно «снять вовремя» было ~1 сек.
+      if (ing.process === 'cook' || ing.process === 'boil') {
+        const rate = item.progress >= 100 ? 0.4 : 1;
+        const newProgress = Math.min(overheatLimit, item.progress + (finalAmount / max) * 100 * rate);
+        if (newProgress >= overheatLimit) {
+          haptic.error();
+          playSound('error');
+          return { ...item, progress: overheatLimit, state: 'burned' };
+        }
+        return { ...item, progress: newProgress, state: 'processing' };
+      }
       const newProgress = Math.min(100, item.progress + (finalAmount / max) * 100);
       if (newProgress >= 100) return { ...item, progress: 100, state: 'ready' };
       return { ...item, progress: newProgress, state: 'processing' };
     }));
   };
 
+  // Отпустил блюдо на плите: если дожарено (>= 100) и не сгорело — готово
+  const handleStoveRelease = (id: string) => {
+    setPrepItems(prev => prev.map(item =>
+      item.id === id && item.state === 'processing' && item.progress >= 100
+        ? { ...item, progress: 100, state: 'ready' }
+        : item
+    ));
+  };
+
+  const handleDiscardItem = (id: string) => {
+    setPrepItems(prev => prev.filter(i => i.id !== id));
+  };
+
+  // Завершает текущее блюдо Бауки: считает прогресс серии и решает,
+  // спавнить следующее блюдо или показать финал.
+  const advanceBauka = () => {
+    const served = baukaServedRef.current + 1;
+    baukaServedRef.current = served;
+    setBaukaServed(served);
+    setBaukaPhase('idle');
+    setBaukaDialog(null);
+    handleResetAll();
+    if (served >= BAUKA_TARGET) {
+      setCoins(c => c + BAUKA_FINALE_BONUS);
+      setOrders([]);
+      tryUnlock('bauka_fan');
+      setBaukaFinale(true); // saveSession вызывается в эффекте ниже (refs уже свежие)
+    } else {
+      setOrders([]); // запустит спавн следующего блюда
+    }
+  };
+
+  const baukaPhrase = () =>
+    BAUKA_PHRASES[Math.min(baukaServedRef.current, BAUKA_PHRASES.length - 1)];
+
   const handleChapalk = () => {
+    haptic.heavy();
     setBaukaPhase('slapped');
     setBaukaDialog('АЙ!!! 😱');
     safeTimeout(() => {
       setBaukaPhase('loving');
-      setBaukaDialog(`А нет нет... это ЛУЧШАЯ ЕДА МОЕЙ ЖИЗНИ! Спасибо, ${playerName}! 😍💖`);
-      safeTimeout(() => {
-        setBaukaPhase('idle');
-        setBaukaDialog(null);
-        setOrders([]);
-        handleResetAll();
-      }, 3200);
+      setBaukaDialog(`Нравится! Нравится!! 😍 ${baukaPhrase()}`);
+      safeTimeout(() => advanceBauka(), 3000);
     }, 700);
   };
 
@@ -290,9 +402,11 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
       const expectedIngredient = RECIPES[waitingOrder.recipeId]?.steps[plate.length]?.ingredient;
       if (expectedIngredient && expectedIngredient !== item.ingredientId) {
         setPlateFlash('bad');
+        haptic.error();
         setTimeout(() => setPlateFlash(null), 500);
       } else {
         setPlateFlash('good');
+        haptic.light();
         setTimeout(() => setPlateFlash(null), 350);
       }
     }
@@ -322,8 +436,15 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
     if (!finishedDish) return;
 
     if (mode === 'free') {
-      setCoins(c => c + RECIPES[finishedDish].price);
+      const price = RECIPES[finishedDish].price;
+      setCoins(c => c + price);
       setDishesServedCount(n => n + 1);
+      playSound('coin');
+      tryUnlock('first_dish');
+      distinctRecipesRef.current.add(finishedDish);
+      if (distinctRecipesRef.current.size >= 10) tryUnlock('chef_10');
+      bumpDaily('dishes', 1);
+      bumpDaily('coins', price);
       setFreeReviewOpen(true);
       return; // plate persists until review is dismissed
     }
@@ -334,7 +455,7 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
     if (!targetOrder) return;
 
     const recipeMatched = targetOrder.recipeId === finishedDish;
-    const isBauka = targetOrder.characterId === 'bauka';
+    const isBauka = targetOrder.characterId === CHARACTER_IDS.BAUKA;
     let earned = 0;
     let reaction: Order['reaction'] = 'good';
 
@@ -344,50 +465,87 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
       setCombo(newCombo);
       setBestCombo(bc => Math.max(bc, newCombo));
       const multiplier = newCombo >= 5 ? 3 : newCombo >= 3 ? 2 : 1;
+      if (newCombo === 3 || newCombo === 5) {
+        setComboToast(newCombo);
+        haptic.combo(newCombo);
+        playSound('combo');
+        safeTimeout(() => setComboToast(null), 1500);
+      } else {
+        haptic.success();
+      }
+      if (newCombo >= 5) tryUnlock('combo_5');
+      bumpDaily('combo', newCombo);
 
       if (isBauka) {
         earned = earned * 2 * multiplier;
-        if (Math.random() < 0.35) {
+        // Какое это блюдо по счёту в серии (1-е, 2-е, 3-е…)
+        const dishNumber = baukaServedRef.current + 1;
+        if (dishNumber % 3 === 0) {
+          // Каждое 3-е блюдо Баука притворяется недовольным —
+          // ждёт «чапалак», прогресс серии не двигается, пока не дашь пощёчину.
           reaction = 'sad';
           setBaukaPhase('dislike');
-          setBaukaDialog('Фу... не очень... 🤢');
+          setBaukaDialog(BAUKA_DISLIKE_PHRASES[Math.floor(Math.random() * BAUKA_DISLIKE_PHRASES.length)]);
         } else {
           reaction = 'bauka_wow';
           setBaukaPhase('loving');
-          setBaukaDialog(`Спасибо, ${playerName}! Ты лучший шеф! 💖`);
-          safeTimeout(() => { setBaukaPhase('idle'); setBaukaDialog(null); setOrders([]); }, 3000);
+          setBaukaDialog(baukaPhrase());
+          safeTimeout(() => advanceBauka(), 2600);
         }
       } else {
         const timeRatio = targetOrder.timeLeft / targetOrder.maxTime;
         if (timeRatio > 0.6) { reaction = 'wow'; earned = (earned + 15) * multiplier; }
         else if (timeRatio < 0.2) { reaction = 'sad'; earned = Math.floor(earned * 0.5 * multiplier); }
         else { reaction = 'good'; earned = earned * multiplier; }
+        earned += targetOrder.tip ?? 0; // чаевые за спецзапрос
+        if (timeRatio > 0.8) tryUnlock('speed_cook');
       }
 
       setWrongDishInfo(null);
       setDishesServedCount(n => n + 1);
+      tryUnlock('first_dish');
+      distinctRecipesRef.current.add(finishedDish);
+      if (distinctRecipesRef.current.size >= 10) tryUnlock('chef_10');
+      bumpDaily('dishes', 1);
 
       if (mode === 'guests') {
         waveServedRef.current++;
-        if (waveServedRef.current % 5 === 0) {
+        setWaveDishes(waveServedRef.current % WAVE_GOAL);
+        if (waveServedRef.current % WAVE_GOAL === 0) {
           const newWave = waveRef.current + 1;
           setWave(newWave);
           waveRef.current = newWave;
           setWaveNotif(`Волна ${newWave}! 🌊`);
           safeTimeout(() => setWaveNotif(null), 2500);
+          if (newWave >= 5) tryUnlock('wave_5');
         }
       }
     } else {
       reaction = 'sad';
       setCombo(0);
       setPlateFlash('bad');
+      haptic.error();
+      playSound('error');
       safeTimeout(() => setPlateFlash(null), 500);
       setWrongDishInfo({
         expected: RECIPES[targetOrder.recipeId]?.name ?? targetOrder.recipeId,
         got: RECIPES[finishedDish]?.name ?? finishedDish,
       });
+      // Подали Бауке не то блюдо: не блокируем заказ — оставляем его «waiting»,
+      // чтобы можно было приготовить нужное и подать снова (иначе серия зависала).
+      if (isBauka) {
+        setBaukaPhase('idle');
+        setBaukaDialog(null);
+        handleResetAll();
+        return;
+      }
     }
 
+    if (earned > 0) {
+      playSound('coin');
+      bumpDaily('coins', earned);
+      if (coins + earned >= 500) tryUnlock('coins_500');
+    }
     setCoins(c => c + earned);
     setOrders(prev => prev.map(o => o.id === targetOrder.id ? { ...o, status: 'eating', reaction } : o));
     if (!isBauka) {
@@ -399,12 +557,14 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
   const handleRestartGame = () => {
     sessionSavedRef.current = false;
     setCoins(0); setDishesServedCount(0);
-    setLives(MAX_LIVES); setGameOver(false);
-    setCombo(0); setBestCombo(0);
-    setWave(1); waveServedRef.current = 0; waveRef.current = 1;
+    distinctRecipesRef.current = new Set();
+    setLives(maxLives); setGameOver(false);
+    setCombo(0); setBestCombo(0); setComboToast(null);
+    setWave(1); waveServedRef.current = 0; waveRef.current = 1; setWaveDishes(0);
     setShowSummary(false); setWaveNotif(null);
     setPlate([]); setPrepItems([]); setFinishedDish(null);
     setOrders([]); setBaukaPhase('idle'); setBaukaDialog(null);
+    setBaukaServed(0); baukaServedRef.current = 0; setBaukaFinale(false);
     setSpeedBoostEnd(null); setWrongDishInfo(null);
     setTutorialStep(0);
   };
@@ -504,7 +664,7 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
               <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>📋</span> Смотри подсказку справа — там все шаги рецепта</p>
               <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>⚡</span> Quick Pick (полоска под кухней) — бери ингредиенты одним касанием</p>
               <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>🔪</span> Тапай или свайпай на разделочной доске</p>
-              <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>🍳</span> Тапай по мясу на плите чтобы пожарить</p>
+              <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>🍳</span> Зажми и держи мясо на плите — отпусти вовремя, не пережарь!</p>
               <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>✅</span> Готово → тапни → добавь на тарелку → ПОДАТЬ!</p>
               {mode === 'guests' && <p className="text-[11px] font-bold text-slate-600 flex gap-2"><span>❤️</span> У тебя 3 жизни — не дай гостям уйти!</p>}
             </div>
@@ -540,6 +700,58 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
                 <button onClick={handleRestartGame}
                   className="flex-1 py-3 bg-orange-500 text-white font-black rounded-2xl border-b-4 border-orange-700 shadow active:scale-95 text-sm">
                   🔄 Ещё раз
+                </button>
+                <button onClick={handleQuitToMenu}
+                  className="flex-1 py-3 bg-white border-2 border-slate-200 text-slate-600 font-black rounded-2xl active:scale-95 text-sm">
+                  🏠 В меню
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Bauka finale ── */}
+      <AnimatePresence>
+        {baukaFinale && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 bg-rose-900/80 flex flex-col items-center justify-center p-6 backdrop-blur-sm overflow-hidden">
+            {/* Floating hearts */}
+            {['💖', '✨', '😍', '⭐', '🎉', '💕'].map((e, i) => (
+              <motion.div key={i}
+                initial={{ y: '110%', opacity: 0 }}
+                animate={{ y: '-20%', opacity: [0, 1, 0] }}
+                transition={{ repeat: Infinity, duration: 2.2 + (i % 3) * 0.6, delay: i * 0.3 }}
+                className="absolute text-3xl pointer-events-none"
+                style={{ left: `${10 + i * 15}%` }}
+              >{e}</motion.div>
+            ))}
+            <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', bounce: 0.5, delay: 0.1 }}
+              className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl text-center relative z-10">
+              <motion.div animate={{ scale: [1, 1.12, 1], rotate: [0, -4, 4, 0] }}
+                transition={{ repeat: Infinity, duration: 1.4 }} className="text-6xl mb-1">😍</motion.div>
+              <motion.h2 animate={{ scale: [1, 1.06, 1] }} transition={{ repeat: Infinity, duration: 0.9 }}
+                className="text-3xl font-black text-rose-500 mb-1 drop-shadow">БРАВИССИМО!</motion.h2>
+              <p className="text-sm text-slate-500 font-bold mb-4">
+                {playerName}, ты накормил Бауку {BAUKA_TARGET} раз — он твой фанат №1! 🐻💖
+              </p>
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {[{ icon: '🍽️', label: 'Блюд', val: baukaServed }, { icon: '💰', label: 'Монет', val: coins }, { icon: '🔥', label: 'Комбо', val: bestCombo }].map(s => (
+                  <div key={s.label} className="bg-rose-50 rounded-xl p-2 border border-rose-100">
+                    <div className="text-xl">{s.icon}</div>
+                    <div className="text-lg font-black text-slate-800">{s.val}</div>
+                    <div className="text-[9px] text-slate-400 font-bold">{s.label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mb-4 bg-amber-50 rounded-2xl px-4 py-2 border border-amber-200">
+                <p className="text-sm font-black text-amber-600">🎉 Бонус фаната: +{BAUKA_FINALE_BONUS} монет</p>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={handleRestartGame}
+                  className="flex-1 py-3 bg-rose-500 text-white font-black rounded-2xl border-b-4 border-rose-700 shadow active:scale-95 text-sm">
+                  🔄 Ещё серия
                 </button>
                 <button onClick={handleQuitToMenu}
                   className="flex-1 py-3 bg-white border-2 border-slate-200 text-slate-600 font-black rounded-2xl active:scale-95 text-sm">
@@ -608,7 +820,7 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
           <div className="flex items-center gap-1.5">
             {mode !== 'free' && (
               <div className="flex gap-0.5">
-                {Array.from({ length: MAX_LIVES }).map((_, i) => (
+                {Array.from({ length: maxLives }).map((_, i) => (
                   <span key={i} className={cn("text-sm leading-none", i < lives ? '' : 'grayscale opacity-30')}>❤️</span>
                 ))}
               </div>
@@ -634,23 +846,40 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
               {combo >= 5 ? '⚡' : '🔥'} ×{comboMultiplier} × {combo}
             </motion.div>
           )}
-          {mode === 'guests' && wave > 1 && (
-            <div className="flex items-center gap-1 bg-blue-500 text-white rounded-full px-2 py-0.5 text-[10px] font-black shadow">
+          {mode === 'guests' && (
+            <div className="flex items-center gap-1.5 bg-blue-500 text-white rounded-full px-2 py-0.5 text-[10px] font-black shadow">
               🌊 В{wave}
+              <div className="flex gap-0.5">
+                {Array.from({ length: WAVE_GOAL }).map((_, i) => (
+                  <div key={i} className={cn(
+                    "w-1.5 h-1.5 rounded-full",
+                    i < waveDishes ? 'bg-white' : 'bg-blue-300/50'
+                  )} />
+                ))}
+              </div>
+              <span className="tabular-nums">{waveDishes}/{WAVE_GOAL}</span>
+            </div>
+          )}
+          {mode === 'bauka' && (
+            <div className="flex items-center gap-1 bg-rose-500 text-white rounded-full px-2 py-0.5 text-[10px] font-black shadow">
+              🐻 {baukaServed}/{BAUKA_TARGET}
             </div>
           )}
           <div className="flex items-center gap-1 ml-auto">
             <button onClick={() => setShopOpen(true)} title="Магазин"
-              className="p-1.5 bg-amber-400 text-white rounded-full shadow active:scale-95">
-              <ShoppingBag className="w-3.5 h-3.5" />
+              className="p-2.5 bg-amber-400 text-white rounded-full shadow active:scale-95 flex items-center justify-center"
+              style={{ minWidth: 40, minHeight: 40 }}>
+              <ShoppingBag className="w-4 h-4" />
             </button>
             <button onClick={() => setIsBookOpen(true)} title="100 блюд"
-              className="p-1.5 bg-amber-400 text-white rounded-full shadow active:scale-95">
-              <BookOpen className="w-3.5 h-3.5" />
+              className="p-2.5 bg-amber-400 text-white rounded-full shadow active:scale-95 flex items-center justify-center"
+              style={{ minWidth: 40, minHeight: 40 }}>
+              <BookOpen className="w-4 h-4" />
             </button>
             <button onClick={() => setInstructionOpen(true)} title="Как играть"
-              className="p-1.5 bg-amber-400 text-white rounded-full shadow active:scale-95">
-              <HelpCircle className="w-3.5 h-3.5" />
+              className="p-2.5 bg-amber-400 text-white rounded-full shadow active:scale-95 flex items-center justify-center"
+              style={{ minWidth: 40, minHeight: 40 }}>
+              <HelpCircle className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -761,6 +990,27 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
         )}
       </AnimatePresence>
 
+      {/* ── Combo toast ── */}
+      <ComboToast level={comboToast} />
+
+      {/* ── Unlock toasts (достижения / задание дня) ── */}
+      <div className="absolute bottom-24 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none w-full px-6">
+        <AnimatePresence>
+          {unlockToasts.map(t => (
+            <motion.div key={t.key}
+              initial={{ y: 30, opacity: 0, scale: 0.9 }} animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: -10, opacity: 0, scale: 0.9 }}
+              className="bg-slate-800/95 text-white rounded-2xl px-4 py-2.5 shadow-xl border-2 border-amber-400 flex items-center gap-2.5 max-w-xs">
+              <span className="text-2xl">{t.icon}</span>
+              <div className="text-left">
+                <div className="text-xs font-black leading-tight">{t.title}</div>
+                {t.sub && <div className="text-[10px] font-bold opacity-70 leading-tight">{t.sub}</div>}
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
       {/* ── Wave notification ── */}
       <AnimatePresence>
         {waveNotif && (
@@ -776,21 +1026,21 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
       {/* ── Customers area ── */}
       {mode !== 'free' ? (
         <div className="bg-amber-100 relative flex items-end pb-2 gap-3 px-4 overflow-x-auto overflow-y-hidden shrink-0 border-b-4 border-orange-300 shadow-inner"
-          style={{ minHeight: '7.5rem', maxHeight: '10rem', WebkitOverflowScrolling: 'touch' }}>
+          style={{ minHeight: '7.5rem', maxHeight: '10rem', WebkitOverflowScrolling: 'touch', scrollSnapType: 'x proximity' }}>
           <div className="absolute inset-0 opacity-10 pointer-events-none"
             style={{ backgroundImage: 'radial-gradient(circle, #f59e0b 2px, transparent 2px)', backgroundSize: '18px 18px' }} />
           <div className="absolute bottom-0 w-full h-6 bg-orange-300 rounded-t-xl" />
           <AnimatePresence>
             {orders.map(order => order.status === 'done' ? null : (
-              <div key={order.id} className="relative z-10 shrink-0">
+              <div key={order.id} className="relative z-10 shrink-0" style={{ scrollSnapAlign: 'start' }}>
                 <CustomerCard
                   order={order}
                   onServe={() => handleServe(order.id)}
                   canServe={finishedDish !== null && order.status === 'waiting'}
                   isUrgent={order.id === mostUrgentId}
-                  baukaPhase={order.characterId === 'bauka' ? baukaPhase : 'idle'}
-                  baukaDialog={order.characterId === 'bauka' ? baukaDialog : null}
-                  onChapalk={order.characterId === 'bauka' ? handleChapalk : undefined}
+                  baukaPhase={order.characterId === CHARACTER_IDS.BAUKA ? baukaPhase : 'idle'}
+                  baukaDialog={order.characterId === CHARACTER_IDS.BAUKA ? baukaDialog : null}
+                  onChapalk={order.characterId === CHARACTER_IDS.BAUKA ? handleChapalk : undefined}
                 />
               </div>
             ))}
@@ -849,6 +1099,7 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
           <KitchenView
             plate={plate} prepItems={prepItems} finishedDish={finishedDish}
             onClearPlate={handleClearPlate} onProcessItem={handleProcessItem}
+            onStoveRelease={handleStoveRelease} onDiscardItem={handleDiscardItem}
             onAssembleItem={handleAssembleItem}
             onServe={mode === 'free' || waitingOrders.length > 0
               ? () => handleServe(waitingOrders.sort((a, b) => a.timeLeft - b.timeLeft)[0]?.id)

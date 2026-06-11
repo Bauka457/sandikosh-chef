@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'motion/react';
-import { CHARACTERS, RECIPES } from '../data';
+import { CHARACTERS, CHARACTER_IDS, RECIPES } from '../data';
 import { Order } from '../types';
 import { cn } from '../utils';
 
@@ -23,7 +23,7 @@ export function CustomerCard({
   const recipe = RECIPES[order.recipeId];
   if (!character || !recipe) return null;
 
-  const isBauka = order.characterId === 'bauka';
+  const isBauka = order.characterId === CHARACTER_IDS.BAUKA;
   const timerPct = (order.timeLeft / order.maxTime) * 100;
   const isPanic = order.maxTime > 30 && order.timeLeft < 15;
   const isWarning = order.maxTime > 30 && order.timeLeft < 30 && !isPanic;
@@ -36,141 +36,115 @@ export function CustomerCard({
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 50 }}
+      initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.8 }}
-      className="relative flex flex-col items-center justify-end h-48 w-28"
+      className="relative flex flex-col items-center w-28 shrink-0"
     >
-      {/* Bauka dialog bubble (above speech bubble) */}
-      <AnimatePresence>
-        {isBauka && baukaDialog && (
-          <motion.div
-            key={baukaDialog}
-            initial={{ scale: 0, y: 10, opacity: 0 }}
-            animate={{ scale: 1, y: 0, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
-            className={cn(
-              "absolute z-30 rounded-2xl px-2.5 py-2 shadow-xl border-2 text-center",
-              isLoving
-                ? 'bg-rose-500 border-rose-300 -top-24'
-                : isDislike
-                ? 'bg-slate-700 border-slate-500 -top-24'
-                : '-top-20'
-            )}
-            style={{ minWidth: 80, maxWidth: 100 }}
-          >
-            <p className={cn(
-              "text-[10px] font-black leading-tight",
-              isLoving ? 'text-white' : isDislike ? 'text-white' : 'text-slate-800'
-            )}>
-              {baukaDialog}
-            </p>
-            <div className={cn(
-              "absolute -bottom-2 left-1/2 -translate-x-1/2 w-3 h-3 border-b-2 border-r-2 rotate-45",
-              isLoving ? 'bg-rose-500 border-rose-300' : isDislike ? 'bg-slate-700 border-slate-500' : 'bg-white border-slate-200'
-            )} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Regular speech bubble (order request) */}
-      <AnimatePresence mode="wait">
-        {order.status === 'waiting' && !isDislike && !isSlapped && !isLoving && (
-          <motion.div
-            key={isPanic ? 'panic' : 'normal'}
-            initial={{ scale: 0, y: 10 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ scale: 0 }}
-            className="absolute -top-10 z-20"
-          >
-            {isPanic ? (
-              <motion.div
-                animate={{ scale: [1, 1.08, 1], backgroundColor: ['#ef4444', '#b91c1c', '#ef4444'] }}
-                transition={{ repeat: Infinity, duration: 0.45 }}
-                className="relative bg-rose-500 rounded-2xl border-4 border-rose-300 px-3 py-1.5 flex flex-col items-center shadow-xl"
-                style={{ minWidth: 72 }}
-              >
-                <div className="text-rose-100 text-[8px] font-black uppercase tracking-widest leading-none">СПЕШИ!</div>
-                <motion.div
-                  animate={{ scale: [1, 1.2, 1] }}
-                  transition={{ repeat: Infinity, duration: 0.45 }}
-                  className="text-white font-black tabular-nums leading-none"
-                  style={{ fontSize: 36 }}
+      {/* ── SPEECH ZONE (always visible above character) ── */}
+      {/* z-20 > character button's z-10: the chapalk button overflows h-14 and must stay tappable */}
+      <div className="relative z-20 w-full h-14 flex items-center justify-center px-1">
+        <AnimatePresence mode="wait">
+          {/* Bauka dialog (highest priority) */}
+          {isBauka && baukaDialog ? (
+            <motion.div key={`dialog-${baukaDialog}`}
+              initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.7, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="w-full flex flex-col items-center gap-1"
+            >
+              <div className={cn(
+                "w-full text-center text-[9px] font-black px-2 py-1.5 rounded-xl leading-snug",
+                isLoving ? 'bg-rose-500 text-white shadow-md'
+                  : isSlapped ? 'bg-rose-600 text-white shadow-md'
+                  : 'bg-slate-700 text-white shadow-md'
+              )}>
+                {baukaDialog}
+              </div>
+              {isDislike && onChapalk && (
+                <motion.button
+                  animate={{ scale: [1, 1.07, 1] }} transition={{ repeat: Infinity, duration: 0.7 }}
+                  style={{ touchAction: 'manipulation' }}
+                  onClick={(e) => { e.stopPropagation(); onChapalk(); }}
+                  className="bg-rose-600 text-white font-black text-[9px] px-3 py-1 rounded-xl shadow-lg border-2 border-rose-400 active:scale-90 whitespace-nowrap"
                 >
-                  {order.timeLeft}
-                </motion.div>
-                <div className="text-rose-200 text-[8px] font-black leading-none">сек</div>
-                <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-rose-500 border-b-2 border-r-2 border-rose-300 rotate-45" />
-              </motion.div>
-            ) : (
-              <div
-                className={cn(
-                  "relative bg-white border-2 rounded-2xl px-2 py-1.5 shadow-md flex flex-col items-center",
-                  isWarning ? 'border-amber-400' : isUrgent ? 'border-orange-400' : 'border-slate-200'
-                )}
-                style={{ minWidth: 72 }}
+                  👋 Дать чапалак!
+                </motion.button>
+              )}
+            </motion.div>
+          ) : isDislike && onChapalk ? (
+            /* Dislike without dialog text: show chapalk button */
+            <motion.div key="chapalk-btn"
+              initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0, opacity: 0 }}>
+              <motion.button
+                animate={{ scale: [1, 1.07, 1] }} transition={{ repeat: Infinity, duration: 0.7 }}
+                style={{ touchAction: 'manipulation' }}
+                onClick={(e) => { e.stopPropagation(); onChapalk(); }}
+                className="bg-rose-600 text-white font-black text-[10px] px-3 py-1.5 rounded-xl shadow-lg border-2 border-rose-400 active:scale-90 whitespace-nowrap"
               >
-                <div className="text-2xl leading-none">{recipe.icon}</div>
-                <div className="text-[11px] font-black text-slate-800 text-center leading-tight mt-0.5 max-w-16">
-                  {recipe.name}
-                </div>
-                {isUrgent && !isWarning && (
-                  <div className="absolute -top-2 -right-2 text-base">⚡</div>
-                )}
+                👋 Дать чапалак!
+              </motion.button>
+            </motion.div>
+          ) : order.status === 'eating' ? (
+            /* Reaction after eating */
+            <motion.div key="eating-reaction"
+              initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex flex-col items-center gap-0.5"
+            >
+              {order.reaction === 'bauka_wow' ? (
+                <div className="text-2xl animate-bounce">😍💖✨</div>
+              ) : order.reaction === 'wow' ? (
+                <div className="text-2xl">❤️</div>
+              ) : order.reaction === 'sad' ? (
+                <div className="text-2xl">🤢</div>
+              ) : (
+                <div className="text-2xl">👍</div>
+              )}
+              {order.reaction === 'bauka_wow' && (
+                <div className="bg-rose-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full border border-rose-300">ВАУ!!!</div>
+              )}
+            </motion.div>
+          ) : order.status === 'waiting' && !isDislike && !isSlapped && !isLoving ? (
+            /* Order bubble */
+            <motion.div key="order-bubble" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}>
+              {isPanic ? (
+                <motion.div
+                  animate={{ scale: [1, 1.06, 1], backgroundColor: ['#ef4444', '#b91c1c', '#ef4444'] }}
+                  transition={{ repeat: Infinity, duration: 0.45 }}
+                  className="bg-rose-500 rounded-2xl border-3 border-rose-300 px-2 py-1 flex flex-col items-center shadow-xl"
+                  style={{ minWidth: 64 }}
+                >
+                  <div className="text-rose-100 text-[7px] font-black uppercase tracking-widest leading-none">СПЕШИ!</div>
+                  <motion.div
+                    animate={{ scale: [1, 1.15, 1] }} transition={{ repeat: Infinity, duration: 0.45 }}
+                    className="text-white font-black tabular-nums leading-none"
+                    style={{ fontSize: 30 }}
+                  >{order.timeLeft}</motion.div>
+                </motion.div>
+              ) : (
                 <div className={cn(
-                  "absolute -bottom-2 left-1/2 -translate-x-1/2 w-3.5 h-3.5 bg-white border-b-2 border-r-2 rotate-45",
-                  isWarning ? 'border-amber-400' : 'border-slate-200'
-                )} />
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+                  "bg-white border-2 rounded-2xl px-2 py-1 shadow-md flex flex-col items-center relative",
+                  isWarning ? 'border-amber-400' : isUrgent ? 'border-orange-400' : 'border-slate-200'
+                )} style={{ minWidth: 64 }}>
+                  <div className="text-xl leading-none">{recipe.icon}</div>
+                  <div className="text-[9px] font-black text-slate-800 text-center leading-tight max-w-16 truncate">
+                    {recipe.name}
+                  </div>
+                  {order.specialRequest && (
+                    <div className="bg-purple-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded-full mt-0.5 whitespace-nowrap">
+                      {order.specialRequest === 'extra_hot' ? '🔥 Острее!' :
+                       order.specialRequest === 'no_spice' ? '❄️ Без специй' : '🍽️ Двойная'}
+                      {order.tip ? ` +${order.tip}` : ''}
+                    </div>
+                  )}
+                  {isUrgent && !isWarning && <div className="absolute -top-2 -right-2 text-sm">⚡</div>}
+                </div>
+              )}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+      </div>
 
-      {/* Reaction bubble (eating state) */}
-      <AnimatePresence>
-        {order.status === 'eating' && !baukaDialog && (
-          <motion.div
-            initial={{ scale: 0, y: 20 }}
-            animate={{ scale: 1, y: 0 }}
-            exit={{ opacity: 0 }}
-            className="absolute -top-10 z-30 flex flex-col items-center text-center"
-          >
-            {order.reaction === 'bauka_wow' ? (
-              <div className="text-3xl animate-bounce">💖✨😍</div>
-            ) : order.reaction === 'wow' ? (
-              <div className="text-3xl">❤️</div>
-            ) : order.reaction === 'sad' ? (
-              <div className="text-3xl">🤢</div>
-            ) : (
-              <div className="text-3xl">👍</div>
-            )}
-            {order.reaction === 'bauka_wow' && (
-              <div className="bg-white text-xs px-2 py-0.5 rounded-full font-black shadow-md mt-0.5 text-rose-500 border-2 border-rose-200 whitespace-nowrap">
-                ВАУ!!!
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* CHAPALK button — appears when Bauka pretends to dislike */}
-      <AnimatePresence>
-        {isDislike && onChapalk && (
-          <motion.button
-            initial={{ scale: 0, y: -10 }}
-            animate={{ scale: [1, 1.06, 1], y: 0 }}
-            exit={{ scale: 0 }}
-            transition={{ repeat: Infinity, duration: 0.8 }}
-            onClick={onChapalk}
-            className="absolute -top-14 z-40 bg-rose-600 text-white font-black text-[10px] px-2.5 py-1.5 rounded-2xl shadow-xl border-4 border-rose-400 whitespace-nowrap active:scale-90"
-          >
-            👋 Дать чапалак!
-          </motion.button>
-        )}
-      </AnimatePresence>
-
-      {/* Character body */}
+      {/* ── CHARACTER BUTTON ── */}
       <motion.button
         disabled={(!canServe || order.status !== 'waiting') && !isDislike}
         onClick={isDislike ? undefined : () => onServe(order.id)}
@@ -178,13 +152,13 @@ export function CustomerCard({
           isSlapped
             ? { x: [0, -20, 18, -15, 12, -8, 5, 0], rotate: [0, -15, 10, -8, 5, 0], y: [0, -8, 0] }
             : isLoving
-            ? { y: [0, -12, 0], rotate: [0, -5, 5, 0], scale: [1, 1.1, 1] }
+            ? { y: [0, -10, 0], rotate: [0, -5, 5, 0], scale: [1, 1.08, 1] }
             : isDislike
             ? { rotate: [-3, 3, -3], y: [0, -2, 0] }
             : isPanic
-            ? { x: [0, -7, 7, -5, 5, -3, 3, 0], y: [0, -5, 2, -3, 0] }
+            ? { x: [0, -7, 7, -5, 5, -3, 3, 0], y: [0, -4, 2, -2, 0] }
             : order.reaction === 'bauka_wow'
-            ? { y: [0, -18, 0], rotate: [0, -8, 8, 0] }
+            ? { y: [0, -14, 0], rotate: [0, -6, 6, 0] }
             : {}
         }
         transition={{
@@ -205,21 +179,14 @@ export function CustomerCard({
       >
         <div className="text-4xl">{character.animal}</div>
 
-        {/* Stars when loving */}
-        <AnimatePresence>
-          {isLoving && (
-            <>
-              {['✨', '💖', '⭐'].map((star, i) => (
-                <motion.div key={i}
-                  initial={{ opacity: 0, scale: 0, x: 0, y: 0 }}
-                  animate={{ opacity: [0, 1, 0], scale: [0, 1.2, 0], x: (i - 1) * 22, y: -28 }}
-                  transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.3 }}
-                  className="absolute pointer-events-none text-sm"
-                />
-              ))}
-            </>
-          )}
-        </AnimatePresence>
+        {/* Floating hearts when loving */}
+        {isLoving && ['✨', '💖', '⭐'].map((star, i) => (
+          <motion.div key={i}
+            animate={{ opacity: [0, 1, 0], scale: [0, 1.2, 0], x: (i - 1) * 22, y: -22 }}
+            transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.3 }}
+            className="absolute pointer-events-none text-sm"
+          >{star}</motion.div>
+        ))}
 
         {/* Name tag */}
         <div className={cn(
@@ -246,9 +213,9 @@ export function CustomerCard({
         )}
       </motion.button>
 
-      {/* Timer bar */}
+      {/* ── TIMER BAR ── */}
       {order.status === 'waiting' && order.maxTime > 30 && !isDislike && !isLoving && (
-        <div className="w-full mt-2 flex flex-col items-center gap-0.5">
+        <div className="w-full mt-1.5 flex flex-col items-center gap-0.5">
           <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden shadow-inner">
             <motion.div
               className={cn('h-full rounded-full transition-colors duration-300', timerColor)}
