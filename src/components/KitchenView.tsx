@@ -53,30 +53,97 @@ export function KitchenView({
     prevPrepRef.current = prepItems;
   }, [prepItems]);
 
-  // ── Hold-to-cook intervals (плита) ──
-  const holdIntervalsRef = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+  // ── Сковорода: температура (греется огнём 🔥, остывает сама) ──
+  const [stoveTemp, setStoveTemp] = useState(0);
+  const stoveTempRef = useRef(0);
+  const heatingRef = useRef(false);
+  const [isHeating, setIsHeating] = useState(false);
+
+  // Свежие ссылки для игрового цикла (обходим устаревшие замыкания)
+  const processRef = useRef(onProcessItem);
+  processRef.current = onProcessItem;
+  const fryItemsRef = useRef<PrepItem[]>([]);
+  const ovenItemsRef = useRef<PrepItem[]>([]);
+
+  // ── Игровой цикл: нагрев/остывание сковороды, жарка, духовка ──
   useEffect(() => {
-    const intervals = holdIntervalsRef.current;
-    return () => { intervals.forEach(clearInterval); intervals.clear(); };
+    const loop = setInterval(() => {
+      const t = stoveTempRef.current;
+      const next = heatingRef.current ? Math.min(100, t + 7) : Math.max(0, t - 2);
+      if (next !== t) { stoveTempRef.current = next; setStoveTemp(next); }
+      // Жарим только на горячей сковороде; чем жарче — тем быстрее (и опаснее)
+      if (next >= 35) {
+        const amt = next >= 95 ? 9 : next >= 60 ? 6 : 2.5;
+        fryItemsRef.current.forEach(it => {
+          if (it.state !== 'burned') processRef.current(it.id, 'cook', amt);
+        });
+      }
+      // Духовка печёт сама
+      ovenItemsRef.current.forEach(it => {
+        if (it.state !== 'burned' && it.progress < 100) processRef.current(it.id, 'bake', 2.5);
+      });
+    }, 150);
+    return () => clearInterval(loop);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Если блюдо сгорело или снято с плиты — остановить его интервал
-  useEffect(() => {
-    holdIntervalsRef.current.forEach((interval, id) => {
-      const item = prepItems.find(p => p.id === id);
-      if (!item || item.state === 'burned' || item.state === 'ready') {
-        clearInterval(interval);
-        holdIntervalsRef.current.delete(id);
-      }
-    });
-  }, [prepItems]);
+  const startHeating = () => {
+    heatingRef.current = true;
+    setIsHeating(true);
+    haptic.light();
+    playSound('sizzle');
+  };
+  const stopHeating = () => {
+    heatingRef.current = false;
+    setIsHeating(false);
+  };
 
-  // ── Swipe state (разделочная) ──
-  const swipeStartRef = useRef<Map<string, number>>(new Map()); // id → последний x
+  // ── Помешивание (кастрюля и миксер): круговые движения пальцем ──
+  const stirRef = useRef<Map<string, { lastAngle: number; accum: number }>>(new Map());
+  const [stirTick, setStirTick] = useState<Record<string, number>>({});
+
+  const pointerAngle = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI;
+  };
+
+  const makeStirHandlers = (station: string, items: PrepItem[], action: ProcessType) => ({
+    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+      if (items.length === 0) return;
+      e.currentTarget.setPointerCapture(e.pointerId);
+      stirRef.current.set(station, { lastAngle: pointerAngle(e), accum: 0 });
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.buttons !== 1) return;
+      const s = stirRef.current.get(station);
+      if (!s || items.length === 0) return;
+      const angle = pointerAngle(e);
+      let d = angle - s.lastAngle;
+      if (d > 180) d -= 360;
+      if (d < -180) d += 360;
+      s.lastAngle = angle;
+      s.accum += Math.abs(d);
+      if (s.accum >= 60) { // каждые 60° дуги — шаг прогресса
+        s.accum -= 60;
+        haptic.light();
+        setStirTick(prev => ({ ...prev, [station]: (prev[station] ?? 0) + 1 }));
+        items.forEach(it => processRef.current(it.id, action, 8));
+      }
+    },
+    onPointerUp: () => stirRef.current.delete(station),
+    onPointerCancel: () => stirRef.current.delete(station),
+  });
+
+  // ── Разделочная: пилим свайпами туда-сюда ──
+  const swipeXRef = useRef<Map<string, number>>(new Map());   // id → последний x
+  const swipeDirRef = useRef<Map<string, number>>(new Map()); // id → направление последнего распила
   const didSwipeRef = useRef(false);
 
-  const stoveItems = prepItems.filter(
-    item => (INGREDIENTS[item.ingredientId].process === 'cook' || INGREDIENTS[item.ingredientId].process === 'boil') && item.state !== 'ready'
+  const fryItems = prepItems.filter(
+    item => INGREDIENTS[item.ingredientId].process === 'cook' && item.state !== 'ready'
+  );
+  const potItems = prepItems.filter(
+    item => INGREDIENTS[item.ingredientId].process === 'boil' && item.state !== 'ready'
   );
   const boardItems = prepItems.filter(
     item => INGREDIENTS[item.ingredientId].process === 'cut' && item.state !== 'ready'
@@ -90,6 +157,8 @@ export function KitchenView({
   const readyItems = prepItems.filter(
     item => item.state === 'ready' || INGREDIENTS[item.ingredientId].process === 'none'
   );
+  fryItemsRef.current = fryItems;
+  ovenItemsRef.current = ovenItems;
 
   // ── CUTTING BOARD ITEM ──
   const renderCuttingItem = (item: PrepItem) => {
@@ -112,22 +181,28 @@ export function KitchenView({
           handleCut(22);
         }}
         onPointerDown={e => {
-          swipeStartRef.current.set(item.id, e.clientX);
+          swipeXRef.current.set(item.id, e.clientX);
           didSwipeRef.current = false;
           e.currentTarget.setPointerCapture(e.pointerId);
         }}
         onPointerMove={e => {
-          const startX = swipeStartRef.current.get(item.id);
+          const startX = swipeXRef.current.get(item.id);
           if (startX === undefined || e.buttons !== 1) return;
-          if (Math.abs(e.clientX - startX) > 20) {
-            handleCut(30); // свайп ножом — больше прогресса, чем тап
-            swipeStartRef.current.set(item.id, e.clientX);
+          const dx = e.clientX - startX;
+          if (Math.abs(dx) > 20) {
+            const dir = Math.sign(dx);
+            const lastDir = swipeDirRef.current.get(item.id) ?? 0;
+            // Пилим как настоящим ножом: смена направления — полный распил,
+            // елозить в одну сторону почти бесполезно
+            handleCut(dir !== lastDir ? 30 : 8);
+            swipeDirRef.current.set(item.id, dir);
+            swipeXRef.current.set(item.id, e.clientX);
             didSwipeRef.current = true;
             haptic.light();
           }
         }}
-        onPointerUp={() => swipeStartRef.current.delete(item.id)}
-        onPointerCancel={() => swipeStartRef.current.delete(item.id)}
+        onPointerUp={() => swipeXRef.current.delete(item.id)}
+        onPointerCancel={() => swipeXRef.current.delete(item.id)}
         style={{ touchAction: 'none', minWidth: 56, minHeight: 56 }}
       >
         {/* Knife animation */}
@@ -163,6 +238,15 @@ export function KitchenView({
         >
           {INGREDIENTS[item.ingredientId].icon}
         </motion.div>
+        {/* Следы распила появляются по мере прогресса */}
+        {item.progress > 0 && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            {Array.from({ length: Math.min(4, Math.floor(item.progress / 25)) }).map((_, i) => (
+              <div key={i} className="absolute w-8 h-0.5 bg-white/90 rounded-full shadow-sm"
+                style={{ transform: `rotate(${-32 + i * 21}deg)` }} />
+            ))}
+          </div>
+        )}
         {item.progress > 0 && item.progress < 100 && (
           <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5">
             <div className="w-10 h-2 bg-amber-200 rounded-full overflow-hidden">
@@ -173,136 +257,82 @@ export function KitchenView({
         )}
         {item.state === 'raw' && (
           <motion.div
-            animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 1.2 }}
+            animate={{ x: [-3, 3, -3] }} transition={{ repeat: Infinity, duration: 0.9 }}
             className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow"
-          >Режь!</motion.div>
+          >↔ Пили!</motion.div>
         )}
       </motion.div>
     );
   };
 
-  // ── STOVE ITEM (зажми и держи; отпусти вовремя — не пережарь!) ──
-  const renderStoveItem = (item: PrepItem) => {
-    const isBoil = INGREDIENTS[item.ingredientId].process === 'boil';
-    const isShaking = panShake === item.id;
-    const isSteaming = steamId === item.id;
-    const isProcessing = item.state === 'processing';
+  // ── СКОВОРОДА: жарится сама на горячей сковороде; готовое снимай тапом ──
+  const renderFryItem = (item: PrepItem) => {
     const isBurned = item.state === 'burned';
-    const isOverheating = isProcessing && item.progress >= 100;
-
-    const startCooking = () => {
-      if (isBurned || holdIntervalsRef.current.has(item.id)) return;
-      haptic.light();
-      playSound('sizzle');
-      setPanShake(item.id);
-      setSteamId(item.id);
-      setTimeout(() => setPanShake(null), 380);
-      setTimeout(() => setSteamId(null), 750);
-      const process = INGREDIENTS[item.ingredientId].process;
-      onProcessItem(item.id, process, 6);
-      holdIntervalsRef.current.set(item.id, setInterval(() => {
-        onProcessItem(item.id, process, 6);
-      }, 130));
-    };
-
-    const stopCooking = () => {
-      const interval = holdIntervalsRef.current.get(item.id);
-      if (interval) {
-        clearInterval(interval);
-        holdIntervalsRef.current.delete(item.id);
-      }
-      onStoveRelease(item.id);
-    };
+    const isDone = !isBurned && item.progress >= 100;
+    const isCooking = item.state === 'processing' && !isDone && stoveTemp >= 35;
+    const isBurning = isDone && stoveTemp >= 35; // готово, но всё ещё на огне — скоро сгорит
 
     return (
       <motion.div
         key={item.id}
         initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
         className={cn(
-          "relative flex flex-col items-center justify-center p-2 rounded-xl cursor-pointer select-none border-2 transition-colors",
+          "relative flex flex-col items-center justify-center p-1.5 rounded-xl cursor-pointer select-none border-2 transition-colors",
           isBurned ? 'bg-slate-200 border-slate-400'
-            : isOverheating ? 'bg-rose-100 border-rose-400'
-            : isBoil ? 'bg-blue-100 border-blue-300' : 'bg-orange-100 border-orange-300'
+            : isBurning ? 'bg-rose-100 border-rose-400'
+            : isDone ? 'bg-emerald-50 border-emerald-400'
+            : 'bg-orange-100 border-orange-300'
         )}
-        onClick={isBurned ? () => { haptic.medium(); onDiscardItem(item.id); } : undefined}
-        onPointerDown={isBurned ? undefined : e => {
-          e.currentTarget.setPointerCapture(e.pointerId);
-          startCooking();
+        onClick={() => {
+          if (isBurned) { haptic.medium(); onDiscardItem(item.id); }
+          else if (isDone) { haptic.success(); onStoveRelease(item.id); }
         }}
-        onPointerUp={isBurned ? undefined : stopCooking}
-        onPointerCancel={isBurned ? undefined : stopCooking}
-        style={{ touchAction: 'none', minWidth: 56, minHeight: 56 }}
+        style={{ touchAction: 'manipulation', minWidth: 52, minHeight: 52 }}
       >
-        {/* Continuous ambient steam when processing */}
-        {isProcessing && [0, 1, 2].map(i => (
+        {/* Пар, пока жарится */}
+        {isCooking && [0, 1, 2].map(i => (
           <motion.div
-            key={`ambient-${i}`}
+            key={`steam-${i}`}
             animate={{ y: [0, -18, -30], opacity: [0, 0.7, 0], x: (i - 1) * 6 }}
             transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.35, ease: 'easeOut' }}
-            className="absolute top-1 text-xs pointer-events-none"
+            className="absolute top-0 text-xs pointer-events-none"
           >💨</motion.div>
         ))}
 
-        {/* Tap steam burst */}
-        <AnimatePresence>
-          {isSteaming && [0, 1, 2].map(i => (
-            <motion.div
-              key={`burst-${i}`}
-              initial={{ y: 0, opacity: 0.9, x: (i - 1) * 7 }}
-              animate={{ y: -28, opacity: 0, x: (i - 1) * 14 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.5, delay: i * 0.08 }}
-              className="absolute top-0 text-base pointer-events-none"
-            >💨</motion.div>
-          ))}
-        </AnimatePresence>
-
-        <div className="absolute -bottom-2 text-base pointer-events-none opacity-50 select-none">
-          {isBoil ? '🫕' : '🍳'}
-        </div>
+        <div className="absolute -bottom-2 text-base pointer-events-none opacity-50 select-none">🍳</div>
 
         <motion.div
-          animate={
-            isShaking
-              ? { rotate: [-8, 8, -5, 5, 0], y: [0, -3, 0] }
-              : isProcessing
-              ? { y: [0, -2, 0] }
-              : {}
-          }
-          transition={{
-            duration: isShaking ? 0.32 : 1.0,
-            repeat: isProcessing && !isShaking ? Infinity : 0,
-            repeatDelay: 0.1,
-          }}
+          animate={isCooking ? { y: [0, -2, 0], rotate: [-2, 2, -2] } : isDone && !isBurned ? { scale: [1, 1.08, 1] } : {}}
+          transition={{ repeat: Infinity, duration: isCooking ? 0.5 : 0.8 }}
           className={cn(
-            "text-4xl select-none z-10",
+            "text-3xl select-none z-10",
             isBurned ? 'grayscale brightness-50 contrast-125'
               : item.state === 'raw' ? 'grayscale brightness-75'
-              : isProcessing ? 'drop-shadow-[0_0_6px_rgba(251,146,60,0.8)]' : ''
+              : isCooking ? 'drop-shadow-[0_0_6px_rgba(251,146,60,0.8)]' : ''
           )}
         >
           {INGREDIENTS[item.ingredientId].icon}
         </motion.div>
 
-        {!isBurned && item.progress > 0 && (
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5">
-            <div className={cn("w-10 h-2 rounded-full overflow-hidden", isOverheating ? 'bg-rose-200' : 'bg-orange-200')}>
-              <motion.div
-                className={cn("h-full rounded-full", isOverheating ? 'bg-rose-600' : 'bg-orange-500')}
-                animate={{ width: `${Math.min(100, item.progress)}%` }} transition={{ duration: 0.15 }} />
-            </div>
-            <span className={cn("text-[7px] font-black leading-none", isOverheating ? 'text-rose-700' : 'text-orange-700')}>
-              {Math.min(100, Math.round(item.progress))}%
-            </span>
+        {!isBurned && !isDone && item.progress > 0 && (
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-9 h-2 bg-orange-200 rounded-full overflow-hidden z-10">
+            <motion.div className="h-full bg-orange-500 rounded-full"
+              animate={{ width: `${Math.min(100, item.progress)}%` }} transition={{ duration: 0.15 }} />
           </div>
         )}
-        {item.state === 'raw' && (
+        {item.state === 'raw' && stoveTemp < 35 && (
           <motion.div
             animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 1.2 }}
-            className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow"
-          >Держи! ☝️</motion.div>
+            className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow z-20"
+          >Грей! 🔥</motion.div>
         )}
-        {isOverheating && (
+        {isDone && !isBurning && (
+          <motion.div
+            animate={{ scale: [1, 1.12, 1] }} transition={{ repeat: Infinity, duration: 0.6 }}
+            className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow z-20"
+          >✅ Сними!</motion.div>
+        )}
+        {isBurning && (
           <motion.div
             animate={{ scale: [1, 1.15, 1] }} transition={{ repeat: Infinity, duration: 0.3 }}
             className="absolute -top-3 left-1/2 -translate-x-1/2 bg-rose-600 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow z-20"
@@ -318,99 +348,50 @@ export function KitchenView({
     );
   };
 
-  // ── OVEN ITEM ──
-  const renderOvenItem = (item: PrepItem) => {
+  // ── ПОМЕШИВАЕМОЕ (кастрюля / миксер): прогресс — от круговых движений по станции ──
+  const renderStirItem = (item: PrepItem, station: 'pot' | 'mixer') => {
     const isProcessing = item.state === 'processing';
+    const isPot = station === 'pot';
+    const rotation = (stirTick[station] ?? 0) * 60;
     return (
       <motion.div
         key={item.id}
         initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
-        className="relative flex flex-col items-center justify-center p-2 rounded-xl cursor-pointer border-2 bg-red-50 border-red-300"
-        onClick={() => onProcessItem(item.id, 'bake', 18)}
-        style={{ touchAction: 'none', minWidth: 56, minHeight: 56 }}
+        className="relative flex flex-col items-center justify-center p-1.5 select-none pointer-events-none"
+        style={{ minWidth: 52, minHeight: 52 }}
       >
-        {/* Heat shimmer */}
+        {/* Пузырьки в кастрюле */}
+        {isPot && isProcessing && [0, 1, 2].map(i => (
+          <motion.div key={`bub-${i}`}
+            animate={{ y: [4, -16], opacity: [0, 0.8, 0], x: (i - 1) * 8 }}
+            transition={{ repeat: Infinity, duration: 1, delay: i * 0.3 }}
+            className="absolute top-0 text-[10px]"
+          >🫧</motion.div>
+        ))}
+        <div className="absolute -bottom-2 text-base pointer-events-none opacity-50 select-none">
+          {isPot ? '🫕' : '🥣'}
+        </div>
         <motion.div
-          animate={{ opacity: isProcessing ? [0.1, 0.35, 0.1] : [0.05, 0.15, 0.05] }}
-          transition={{ repeat: Infinity, duration: isProcessing ? 1.0 : 2.5 }}
-          className="absolute inset-0 rounded-xl bg-orange-400 pointer-events-none"
-        />
-        <motion.div
-          animate={{ scale: isProcessing ? [1, 1.08, 0.97, 1.05, 1] : [1, 1.03, 1] }}
-          transition={{ repeat: Infinity, duration: isProcessing ? 1.2 : 2.5 }}
+          animate={{ rotate: rotation }}
+          transition={{ type: 'spring', stiffness: 220, damping: 18 }}
           className={cn(
-            "text-4xl select-none z-10",
-            item.state === 'raw' ? 'grayscale brightness-75' : isProcessing ? 'drop-shadow-[0_0_8px_rgba(239,68,68,0.6)]' : ''
+            "text-3xl z-10",
+            item.state === 'raw' ? 'grayscale brightness-75'
+              : isProcessing ? 'drop-shadow-[0_0_6px_rgba(96,165,250,0.8)]' : ''
           )}
         >
           {INGREDIENTS[item.ingredientId].icon}
         </motion.div>
         {item.progress > 0 && item.progress < 100 && (
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5">
-            <div className="w-10 h-2 bg-red-200 rounded-full overflow-hidden">
-              <motion.div className="h-full bg-red-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
-            </div>
-            <span className="text-[7px] font-black text-red-700 leading-none">{Math.round(item.progress)}%</span>
-          </div>
-        )}
-        <motion.div
-          animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}
-          className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow"
-        >Тапай!</motion.div>
-      </motion.div>
-    );
-  };
-
-  // ── MIXER ITEM ──
-  const renderMixerItem = (item: PrepItem) => {
-    const isSpinning = mixSpinId === item.id;
-    const isProcessing = item.state === 'processing';
-    const handleMix = (amount: number) => {
-      setMixSpinId(item.id);
-      setTimeout(() => setMixSpinId(null), 380);
-      onProcessItem(item.id, 'mix', amount);
-    };
-    return (
-      <motion.div
-        key={item.id}
-        initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
-        className="relative flex flex-col items-center justify-center p-2 rounded-xl cursor-pointer border-2 bg-blue-50 border-blue-300"
-        onClick={() => handleMix(22)}
-        onPointerMove={e => { if (e.buttons === 1) handleMix(5); }}
-        style={{ touchAction: 'none', minWidth: 56, minHeight: 56 }}
-      >
-        <motion.div
-          animate={
-            isSpinning
-              ? { rotate: 360, scale: [1, 1.15, 1] }
-              : isProcessing
-              ? { rotate: [0, 8, -8, 0] }
-              : {}
-          }
-          transition={{
-            duration: isSpinning ? 0.32 : 1.4,
-            repeat: isProcessing && !isSpinning ? Infinity : 0,
-          }}
-          className={cn(
-            "text-4xl select-none z-10",
-            item.state === 'raw' ? 'grayscale brightness-75' : isProcessing ? 'drop-shadow-[0_0_6px_rgba(96,165,250,0.8)]' : ''
-          )}
-        >
-          {INGREDIENTS[item.ingredientId].icon}
-        </motion.div>
-        {item.progress > 0 && item.progress < 100 && (
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5">
-            <div className="w-10 h-2 bg-blue-200 rounded-full overflow-hidden">
-              <motion.div className="h-full bg-blue-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
-            </div>
-            <span className="text-[7px] font-black text-blue-700 leading-none">{Math.round(item.progress)}%</span>
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-9 h-2 bg-blue-200 rounded-full overflow-hidden z-10">
+            <motion.div className="h-full bg-blue-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
           </div>
         )}
         {item.state === 'raw' && (
           <motion.div
-            animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 1.2 }}
-            className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow"
-          >Взбивай!</motion.div>
+            animate={{ rotate: [0, 360] }} transition={{ repeat: Infinity, duration: 1.6, ease: 'linear' }}
+            className="absolute -top-3 left-1/2 -translate-x-1/2 text-sm z-20"
+          >🌀</motion.div>
         )}
       </motion.div>
     );
