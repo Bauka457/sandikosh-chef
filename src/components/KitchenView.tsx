@@ -2,7 +2,7 @@ import { INGREDIENTS, RECIPES } from '../data';
 import { IngredientType, Recipe, RecipeId, PrepItem, ProcessType } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trash2, Flame } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { cn, haptic } from '../utils';
 import { playSound } from '../sound';
 
@@ -30,9 +30,6 @@ export function KitchenView({
   const dish = finishedDish ? RECIPES[finishedDish] : null;
 
   const [knifeFlash, setKnifeFlash] = useState<string | null>(null);
-  const [panShake, setPanShake] = useState<string | null>(null);
-  const [steamId, setSteamId] = useState<string | null>(null);
-  const [mixSpinId, setMixSpinId] = useState<string | null>(null);
 
   // Track items that just became ready for pop animation
   const [justReadyIds, setJustReadyIds] = useState<Set<string>>(new Set());
@@ -102,18 +99,18 @@ export function KitchenView({
   const stirRef = useRef<Map<string, { lastAngle: number; accum: number }>>(new Map());
   const [stirTick, setStirTick] = useState<Record<string, number>>({});
 
-  const pointerAngle = (e: React.PointerEvent<HTMLDivElement>) => {
+  const pointerAngle = (e: ReactPointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     return Math.atan2(e.clientY - (r.top + r.height / 2), e.clientX - (r.left + r.width / 2)) * 180 / Math.PI;
   };
 
   const makeStirHandlers = (station: string, items: PrepItem[], action: ProcessType) => ({
-    onPointerDown: (e: React.PointerEvent<HTMLDivElement>) => {
+    onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => {
       if (items.length === 0) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       stirRef.current.set(station, { lastAngle: pointerAngle(e), accum: 0 });
     },
-    onPointerMove: (e: React.PointerEvent<HTMLDivElement>) => {
+    onPointerMove: (e: ReactPointerEvent<HTMLDivElement>) => {
       if (e.buttons !== 1) return;
       const s = stirRef.current.get(station);
       if (!s || items.length === 0) return;
@@ -397,11 +394,53 @@ export function KitchenView({
     );
   };
 
+  // ── ДУХОВКА: печётся сама (игровой цикл), тап ускоряет; на 100% уходит в «Готово» ──
+  const renderOvenItem = (item: PrepItem) => {
+    const isProcessing = item.state === 'processing' || item.progress > 0;
+    return (
+      <motion.div
+        key={item.id}
+        initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
+        className="relative flex flex-col items-center justify-center p-2 rounded-xl cursor-pointer border-2 bg-red-50 border-red-300 select-none"
+        onClick={() => onProcessItem(item.id, 'bake', 18)}
+        style={{ touchAction: 'manipulation', minWidth: 52, minHeight: 52 }}
+      >
+        {/* Heat shimmer */}
+        <motion.div
+          animate={{ opacity: isProcessing ? [0.1, 0.35, 0.1] : [0.05, 0.15, 0.05] }}
+          transition={{ repeat: Infinity, duration: isProcessing ? 1.0 : 2.5 }}
+          className="absolute inset-0 rounded-xl bg-orange-400 pointer-events-none"
+        />
+        <motion.div
+          animate={{ scale: isProcessing ? [1, 1.08, 0.97, 1.05, 1] : [1, 1.03, 1] }}
+          transition={{ repeat: Infinity, duration: isProcessing ? 1.2 : 2.5 }}
+          className={cn(
+            "text-3xl select-none z-10",
+            item.state === 'raw' ? 'grayscale brightness-75' : isProcessing ? 'drop-shadow-[0_0_8px_rgba(239,68,68,0.6)]' : ''
+          )}
+        >
+          {INGREDIENTS[item.ingredientId].icon}
+        </motion.div>
+        {item.progress > 0 && item.progress < 100 && (
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-9 h-2 bg-red-200 rounded-full overflow-hidden z-10">
+            <motion.div className="h-full bg-red-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
+          </div>
+        )}
+        {item.state === 'raw' && (
+          <motion.div
+            animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}
+            className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow z-20"
+          >Печётся… 🔥</motion.div>
+        )}
+      </motion.div>
+    );
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-amber-50 relative overflow-hidden">
 
       {/* 2×2 Station Grid — fixed height so assembly always has room */}
-      <div className="grid grid-cols-2 gap-1.5 p-1.5 shrink-0" style={{ height: '48%', minHeight: 190, maxHeight: 260 }}>
+      <div className="grid grid-cols-2 gap-1.5 p-1.5 shrink-0" style={{ height: '46%', minHeight: 190, maxHeight: 260 }}>
 
         {/* CUTTING BOARD */}
         <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-amber-500 shadow-md"
@@ -422,64 +461,90 @@ export function KitchenView({
           </div>
         </div>
 
-        {/* STOVE */}
-        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-orange-400 bg-orange-50 shadow-md">
-          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0">
-            <Flame className="w-3.5 h-3.5 text-orange-500" />
+        {/* STOVE — зажми и держи, чтобы греть; сними вовремя, иначе сгорит */}
+        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-orange-400 bg-orange-50 shadow-md select-none"
+          onPointerDown={startHeating}
+          onPointerUp={stopHeating}
+          onPointerLeave={stopHeating}
+          onPointerCancel={stopHeating}
+          style={{ touchAction: 'none' }}
+        >
+          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0 z-10">
+            <Flame className={cn("w-3.5 h-3.5", isHeating ? 'text-rose-500' : 'text-orange-400')} />
             <span className="text-[9px] font-black text-orange-700 uppercase tracking-wide">Плита</span>
-            {stoveItems.some(i => i.state === 'processing') && (
-              <motion.span
-                animate={{ opacity: [0.6, 1, 0.6] }} transition={{ repeat: Infinity, duration: 0.8 }}
-                className="ml-auto text-sm"
-              >🔥</motion.span>
-            )}
-          </div>
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-12 h-12 rounded-full border-4 border-orange-200 opacity-20 pointer-events-none">
-            <div className="absolute inset-2 rounded-full border-4 border-orange-300">
-              <div className="absolute inset-2 rounded-full bg-orange-200" />
+            {/* Шкала нагрева */}
+            <div className="ml-auto w-12 h-2 rounded-full bg-orange-100 overflow-hidden border border-orange-200">
+              <motion.div
+                className={cn("h-full rounded-full", stoveTemp >= 80 ? 'bg-rose-500' : stoveTemp >= 35 ? 'bg-orange-500' : 'bg-emerald-400')}
+                animate={{ width: `${stoveTemp}%` }} transition={{ duration: 0.15 }}
+              />
             </div>
           </div>
           <div className="flex-1 flex items-center justify-center gap-1 flex-wrap px-1 z-10 overflow-hidden">
             <AnimatePresence>
-              {stoveItems.map(item => renderStoveItem(item))}
+              {fryItems.map(item => renderFryItem(item))}
             </AnimatePresence>
-            {stoveItems.length === 0 && (
-              <div className="text-orange-300 text-[9px] font-bold text-center px-1">Мясо / Вода</div>
+            {fryItems.length === 0 && (
+              <div className="text-orange-300 text-[9px] font-bold text-center px-1">Мясо · зажми 🔥</div>
             )}
           </div>
         </div>
 
-        {/* OVEN */}
-        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-red-400 shadow-md"
-          style={{ background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)' }}>
-          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0">
-            <span className="text-sm">🌡️</span>
-            <span className="text-[9px] font-black text-red-700 uppercase tracking-wide">Духовка 180°</span>
+        {/* POT — мешай пальцем по кругу */}
+        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-cyan-400 bg-cyan-50 shadow-md">
+          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0 z-10">
+            <span className="text-sm">🫕</span>
+            <span className="text-[9px] font-black text-cyan-700 uppercase tracking-wide">Кастрюля</span>
           </div>
-          <div className="flex-1 flex items-center justify-center gap-1 flex-wrap px-1 z-10 overflow-hidden">
+          <div
+            className="flex-1 flex items-center justify-center gap-1 flex-wrap px-1 z-10 overflow-hidden"
+            style={{ touchAction: 'none' }}
+            {...makeStirHandlers('pot', potItems, 'boil')}
+          >
             <AnimatePresence>
-              {ovenItems.map(item => renderOvenItem(item))}
+              {potItems.map(item => renderStirItem(item, 'pot'))}
             </AnimatePresence>
-            {ovenItems.length === 0 && (
-              <div className="text-red-300 text-[9px] font-bold text-center px-1">Выпечка</div>
+            {potItems.length === 0 && (
+              <div className="text-cyan-300 text-[9px] font-bold text-center px-1">Суп / Каша</div>
             )}
           </div>
         </div>
 
-        {/* MIXER */}
+        {/* MIXER — круговые движения пальцем */}
         <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-blue-300 bg-blue-50 shadow-md">
-          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0">
+          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0 z-10">
             <span className="text-sm">🌀</span>
             <span className="text-[9px] font-black text-blue-700 uppercase tracking-wide">Миксер</span>
           </div>
-          <div className="flex-1 flex items-center justify-center gap-1 flex-wrap px-1 z-10 overflow-hidden">
+          <div
+            className="flex-1 flex items-center justify-center gap-1 flex-wrap px-1 z-10 overflow-hidden"
+            style={{ touchAction: 'none' }}
+            {...makeStirHandlers('mixer', mixerItems, 'mix')}
+          >
             <AnimatePresence>
-              {mixerItems.map(item => renderMixerItem(item))}
+              {mixerItems.map(item => renderStirItem(item, 'mixer'))}
             </AnimatePresence>
             {mixerItems.length === 0 && (
               <div className="text-blue-300 text-[9px] font-bold text-center px-1">Крем / Соус</div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* OVEN — печётся сама, занимает узкую полосу */}
+      <div className="relative mx-1.5 mb-1.5 rounded-2xl overflow-hidden flex items-center border-4 border-red-400 shadow-md shrink-0"
+        style={{ background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', minHeight: 60 }}>
+        <div className="flex items-center gap-1 px-2 shrink-0 z-10">
+          <span className="text-sm">🌡️</span>
+          <span className="text-[9px] font-black text-red-700 uppercase tracking-wide leading-tight">Духовка<br/>180°</span>
+        </div>
+        <div className="flex-1 flex items-center justify-center gap-2 flex-wrap px-1 z-10 overflow-hidden py-1">
+          <AnimatePresence>
+            {ovenItems.map(item => renderOvenItem(item))}
+          </AnimatePresence>
+          {ovenItems.length === 0 && (
+            <div className="text-red-300 text-[9px] font-bold text-center px-1">Выпечка</div>
+          )}
         </div>
       </div>
 
