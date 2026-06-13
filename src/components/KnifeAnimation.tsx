@@ -23,8 +23,9 @@ const SWIPE_AMOUNT = 32;    // прогресс за свайп вниз (руб
 const SWIPE_THRESHOLD = 14; // px вертикального движения = один рез
 
 /**
- * Реальная разделочная доска: деревянный SVG-фон, нож-SVG, который рубит
- * вниз-вверх на каждый тап/свайп, и линии разреза, нарастающие по прогрессу.
+ * Разделочная доска в стиле Cooking Fever: тёплое дерево с волокнами и тенью,
+ * крупный ингредиент по центру, стальной нож-SVG с бликом и заклёпками,
+ * который рубит вниз-вверх на тап/свайп. Вся сцена — один масштабируемый SVG.
  */
 export function KnifeAnimation({ icon, progress, state, onCut, onComplete, className }: Props) {
   const knife = useAnimationControls();
@@ -44,13 +45,10 @@ export function KnifeAnimation({ icon, progress, state, onCut, onComplete, class
 
   const chop = (amount: number) => {
     if (progress >= 100) return;
-    // удар ножом: вниз к ингредиенту и обратно
-    knife.start({
-      y: [-30, 6, -30],
-      rotate: [-26, -6, -26],
-    }, { duration: 0.24, times: [0, 0.5, 1], ease: 'easeInOut' });
-    // ингредиент вздрагивает под ножом
-    food.start({ x: [0, -2, 2, 0], scaleY: [1, 0.88, 1] }, { duration: 0.24 });
+    // нож рубит вниз к ингредиенту и возвращается (остаётся в кадре)
+    knife.start({ y: [0, 17, 0] }, { duration: 0.22, times: [0, 0.5, 1], ease: 'easeOut' });
+    // ингредиент вздрагивает под лезвием
+    food.start({ scaleY: [1, 0.86, 1], x: [0, -1.5, 1.5, 0] }, { duration: 0.22 });
     haptic.light();
     playSound('chop');
     onCut(amount);
@@ -81,86 +79,135 @@ export function KnifeAnimation({ icon, progress, state, onCut, onComplete, class
   return (
     <div
       className={cn('relative select-none cursor-pointer', className)}
-      style={{ width: 92, height: 78, touchAction: 'none' }}
+      style={{
+        width: 140,
+        aspectRatio: '140 / 100',
+        maxWidth: '100%',
+        maxHeight: '100%',
+        touchAction: 'none',
+      }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={() => { startY.current = null; }}
     >
-      {/* ── Деревянная доска (SVG) ── */}
-      <svg viewBox="0 0 100 84" className="absolute inset-0 h-full w-full" preserveAspectRatio="none">
+      <svg
+        viewBox="0 0 140 100"
+        preserveAspectRatio="xMidYMid meet"
+        className="h-full w-full overflow-visible"
+      >
         <defs>
-          <linearGradient id="kniBoard" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor="#e8c089" />
-            <stop offset="1" stopColor="#cf9a4f" />
+          {/* тёплое дерево */}
+          <linearGradient id="kniWood" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#E2BA82" />
+            <stop offset="0.5" stopColor="#D4A574" />
+            <stop offset="1" stopColor="#C2914F" />
           </linearGradient>
+          {/* сталь лезвия */}
+          <linearGradient id="kniSteel" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stopColor="#fbfdff" />
+            <stop offset="0.5" stopColor="#cfd8e2" />
+            <stop offset="1" stopColor="#aab6c4" />
+          </linearGradient>
+          {/* дерево рукояти */}
+          <linearGradient id="kniHandle" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stopColor="#8a5e34" />
+            <stop offset="1" stopColor="#5a3c1f" />
+          </linearGradient>
+
+          <filter id="kniBoardShadow" x="-20%" y="-20%" width="140%" height="160%">
+            <feDropShadow dx="0" dy="2.5" stdDeviation="2.2" floodColor="#3a2410" floodOpacity="0.35" />
+          </filter>
+          <filter id="kniKnifeShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="1.6" stdDeviation="1.1" floodColor="#000000" floodOpacity="0.4" />
+          </filter>
+          <filter id="kniCutShadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="0.6" stdDeviation="0.5" floodColor="#000000" floodOpacity="0.55" />
+          </filter>
         </defs>
-        {/* ручка-«язычок» доски слева */}
-        <rect x="2" y="30" width="14" height="22" rx="5" fill="#c08f49" stroke="#9c6f30" strokeWidth="1.5" />
-        {/* тело доски */}
-        <rect x="12" y="14" width="86" height="66" rx="11" fill="url(#kniBoard)" stroke="#9c6f30" strokeWidth="2" />
+
+        {/* ── Доска: 3D-торец + столешница ── */}
+        <rect x="12" y="20" width="116" height="62" rx="13" fill="#A9762F" />
+        <g filter="url(#kniBoardShadow)">
+          <rect x="12" y="14" width="116" height="64" rx="13" fill="url(#kniWood)" stroke="#9C6F30" strokeWidth="1.5" />
+        </g>
+        {/* блик сверху для объёма */}
+        <rect x="16" y="17" width="108" height="10" rx="6" fill="#ffffff" opacity="0.12" />
         {/* волокна дерева */}
-        {[24, 33, 42, 51, 60, 69].map((y) => (
-          <line key={y} x1="20" y1={y} x2="92" y2={y} stroke="#b07f3c" strokeWidth="1" opacity="0.35" />
-        ))}
+        <g stroke="#B9874A" strokeWidth="1" fill="none" opacity="0.45" strokeLinecap="round">
+          <path d="M22 32 q34 -5 96 0" />
+          <path d="M22 42 q40 5 96 -1" />
+          <path d="M22 52 q30 -6 96 1" />
+          <path d="M22 62 q44 6 96 -1" />
+          <path d="M22 71 q34 -4 96 0" />
+        </g>
+        {/* сучок */}
+        <ellipse cx="36" cy="47" rx="3.2" ry="5" fill="none" stroke="#A9762F" strokeWidth="1.4" opacity="0.5" />
+        {/* отверстие-ручка справа */}
+        <circle cx="119" cy="46" r="2.4" fill="#9C6F30" opacity="0.6" />
+
+        {/* ── Ингредиент + линии разреза ── */}
+        <motion.g animate={food} style={{ transformBox: 'fill-box', transformOrigin: 'center' }}>
+          <text
+            x="70"
+            y="49"
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize="42"
+            style={{ filter: isRaw ? 'grayscale(1) brightness(0.92)' : undefined }}
+          >
+            {icon}
+          </text>
+          <g filter="url(#kniCutShadow)" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" opacity="0.92">
+            {Array.from({ length: cuts }).map((_, i) => (
+              <line key={i} x1="54" y1="49" x2="86" y2="49" transform={`rotate(${-34 + i * 16} 70 49)`} />
+            ))}
+          </g>
+        </motion.g>
+
+        {/* ── Нож (сталь + рукоять с заклёпками) ── */}
+        <motion.g animate={knife} initial={{ y: 0 }} filter="url(#kniKnifeShadow)">
+          {/* рукоять */}
+          <rect x="62" y="0" width="16" height="13" rx="3.5" fill="url(#kniHandle)" stroke="#46300f" strokeWidth="1" />
+          {/* заклёпки */}
+          <circle cx="70" cy="3.4" r="1.15" fill="#E4C485" />
+          <circle cx="70" cy="6.5" r="1.15" fill="#E4C485" />
+          <circle cx="70" cy="9.6" r="1.15" fill="#E4C485" />
+          {/* больстер */}
+          <rect x="63" y="13" width="14" height="3" rx="1.2" fill="url(#kniSteel)" stroke="#8b95a1" strokeWidth="0.6" />
+          {/* лезвие */}
+          <path
+            d="M63 16 L77 16 L74.5 26 L70 32 L65.5 26 Z"
+            fill="url(#kniSteel)"
+            stroke="#8b95a1"
+            strokeWidth="0.8"
+            strokeLinejoin="round"
+          />
+          {/* центральный блик */}
+          <path d="M69 17 L71 17 L70 30 Z" fill="#ffffff" opacity="0.6" />
+          {/* остриё-кромка */}
+          <path d="M65.5 26 L70 32 L74.5 26" fill="none" stroke="#eef3f8" strokeWidth="0.9" strokeLinecap="round" />
+        </motion.g>
+
+        {/* ── Прогресс-бар ── */}
+        <rect x="35" y="87" width="70" height="4.5" rx="2.25" fill="#000000" opacity="0.22" />
+        <motion.rect
+          x="35"
+          y="87"
+          height="4.5"
+          rx="2.25"
+          fill="#10b981"
+          animate={{ width: (progress / 100) * 70 }}
+          transition={{ duration: 0.18 }}
+        />
       </svg>
 
-      {/* ── Ингредиент с линиями разреза ── */}
-      <motion.div
-        animate={food}
-        className="absolute left-1/2 top-[54%] z-10 -translate-x-1/2 -translate-y-1/2"
-        style={{ originY: 1 }}
-      >
-        <div className={cn('relative text-3xl leading-none', isRaw && 'grayscale brightness-90')}>
-          {icon}
-          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            {Array.from({ length: cuts }).map((_, i) => (
-              <span
-                key={i}
-                className="absolute left-1/2 top-1/2 h-0.5 w-7 rounded-full bg-white/85 shadow-sm"
-                style={{ transform: `translate(-50%,-50%) rotate(${-32 + i * 16}deg)` }}
-              />
-            ))}
-          </div>
-        </div>
-      </motion.div>
-
-      {/* ── Нож (SVG) ── */}
-      <motion.svg
-        animate={knife}
-        initial={{ y: -30, rotate: -26 }}
-        viewBox="0 0 64 64"
-        className="absolute left-[56%] top-0 z-20 h-10 w-10 origin-bottom-left drop-shadow-md pointer-events-none"
-      >
-        {/* лезвие */}
-        <path d="M6 6 L44 32 L8 36 Z" fill="#e3e9f0" stroke="#94a0ad" strokeWidth="1.6" strokeLinejoin="round" />
-        <path d="M6 6 L44 32 L24 33 Z" fill="#f4f8fc" opacity="0.85" />
-        {/* обух/блик */}
-        <line x1="6" y1="6" x2="44" y2="32" stroke="#ffffff" strokeWidth="1.4" opacity="0.7" />
-        {/* рукоять */}
-        <g transform="rotate(34 42 32)">
-          <rect x="42" y="28" width="20" height="8" rx="4" fill="#6b4a2b" stroke="#46300f" strokeWidth="1.2" />
-          <circle cx="58" cy="32" r="1.4" fill="#caa86f" />
-        </g>
-      </motion.svg>
-
-      {/* ── Прогресс-бар ── */}
-      <div className="absolute bottom-0 left-1/2 z-20 w-[74%] -translate-x-1/2">
-        <div className="h-1.5 overflow-hidden rounded-full bg-amber-900/30">
-          <motion.div
-            className="h-full rounded-full bg-emerald-500"
-            animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.18 }}
-          />
-        </div>
-      </div>
-
-      {/* ── Подсказка на сыром ── */}
+      {/* ── Подсказка на сыром (HTML-оверлей) ── */}
       {progress === 0 && (
         <motion.div
           animate={{ y: [0, -2, 0] }}
           transition={{ repeat: Infinity, duration: 1 }}
-          className="absolute -top-1.5 left-1/2 z-30 -translate-x-1/2 whitespace-nowrap rounded-full bg-amber-700 px-1.5 py-0.5 text-[8px] font-black text-white shadow"
+          className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-amber-700 px-1.5 py-0.5 text-[8px] font-black text-white shadow"
         >
           🔪 Режь!
         </motion.div>

@@ -342,6 +342,7 @@ export function KitchenView({
               {boardItems.map(item => (
                 <motion.div
                   key={item.id}
+                  className="h-full min-w-0 flex items-center justify-center"
                   initial={{ scale: 0, y: -16 }}
                   animate={{ scale: 1, y: 0 }}
                   exit={{ scale: 0 }}
