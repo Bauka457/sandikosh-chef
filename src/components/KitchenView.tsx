@@ -5,6 +5,7 @@ import { Trash2, Flame } from 'lucide-react';
 import { useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { cn, haptic } from '../utils';
 import { playSound } from '../sound';
+import { KnifeAnimation } from './KnifeAnimation';
 
 interface Props {
   plate: IngredientType[];
@@ -28,8 +29,6 @@ export function KitchenView({
   plateFlash, activeRecipe, onQuickPick, stock,
 }: Props) {
   const dish = finishedDish ? RECIPES[finishedDish] : null;
-
-  const [knifeFlash, setKnifeFlash] = useState<string | null>(null);
 
   // Track items that just became ready for pop animation
   const [justReadyIds, setJustReadyIds] = useState<Set<string>>(new Set());
@@ -131,11 +130,6 @@ export function KitchenView({
     onPointerCancel: () => stirRef.current.delete(station),
   });
 
-  // ── Разделочная: пилим свайпами туда-сюда ──
-  const swipeXRef = useRef<Map<string, number>>(new Map());   // id → последний x
-  const swipeDirRef = useRef<Map<string, number>>(new Map()); // id → направление последнего распила
-  const didSwipeRef = useRef(false);
-
   const fryItems = prepItems.filter(
     item => INGREDIENTS[item.ingredientId].process === 'cook' && item.state !== 'ready'
   );
@@ -156,111 +150,6 @@ export function KitchenView({
   );
   fryItemsRef.current = fryItems;
   ovenItemsRef.current = ovenItems;
-
-  // ── CUTTING BOARD ITEM ──
-  const renderCuttingItem = (item: PrepItem) => {
-    const isCutting = knifeFlash === item.id;
-    const isProcessing = item.state === 'processing';
-    const handleCut = (amount: number) => {
-      setKnifeFlash(item.id);
-      setTimeout(() => setKnifeFlash(null), 280);
-      playSound('chop');
-      onProcessItem(item.id, 'cut', amount);
-    };
-    return (
-      <motion.div
-        key={item.id}
-        initial={{ scale: 0, y: -20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0 }}
-        className="relative flex flex-col items-center justify-center p-2 cursor-pointer select-none"
-        onClick={() => {
-          // Тап — запасной вариант; если был свайп, клик не засчитываем повторно
-          if (didSwipeRef.current) { didSwipeRef.current = false; return; }
-          handleCut(22);
-        }}
-        onPointerDown={e => {
-          swipeXRef.current.set(item.id, e.clientX);
-          didSwipeRef.current = false;
-          e.currentTarget.setPointerCapture(e.pointerId);
-        }}
-        onPointerMove={e => {
-          const startX = swipeXRef.current.get(item.id);
-          if (startX === undefined || e.buttons !== 1) return;
-          const dx = e.clientX - startX;
-          if (Math.abs(dx) > 20) {
-            const dir = Math.sign(dx);
-            const lastDir = swipeDirRef.current.get(item.id) ?? 0;
-            // Пилим как настоящим ножом: смена направления — полный распил,
-            // елозить в одну сторону почти бесполезно
-            handleCut(dir !== lastDir ? 30 : 8);
-            swipeDirRef.current.set(item.id, dir);
-            swipeXRef.current.set(item.id, e.clientX);
-            didSwipeRef.current = true;
-            haptic.light();
-          }
-        }}
-        onPointerUp={() => swipeXRef.current.delete(item.id)}
-        onPointerCancel={() => swipeXRef.current.delete(item.id)}
-        style={{ touchAction: 'none', minWidth: 56, minHeight: 56 }}
-      >
-        {/* Knife animation */}
-        <AnimatePresence>
-          {isCutting && (
-            <motion.div key="knife"
-              initial={{ x: -28, y: -8, rotate: -40, opacity: 0 }}
-              animate={{ x: 10, y: 10, rotate: 10, opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.22 }}
-              className="absolute text-2xl z-20 pointer-events-none"
-            >🔪</motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Idle knife hint on raw */}
-        {!isProcessing && !isCutting && (
-          <motion.div
-            animate={{ rotate: [0, -15, 0], y: [0, -3, 0] }}
-            transition={{ repeat: Infinity, duration: 1.4 }}
-            className="absolute -right-2 -top-2 text-base pointer-events-none opacity-70"
-          >🔪</motion.div>
-        )}
-
-        <motion.div
-          animate={isCutting
-            ? { x: [0, -4, 4, -2, 0], scale: [1, 0.88, 1] }
-            : isProcessing
-            ? { rotate: [0, -3, 3, -2, 0] }
-            : {}}
-          transition={{ duration: 0.22, repeat: isProcessing && !isCutting ? Infinity : 0, repeatDelay: 0.4 }}
-          className={cn("text-4xl select-none", item.state === 'raw' && 'grayscale brightness-75')}
-        >
-          {INGREDIENTS[item.ingredientId].icon}
-        </motion.div>
-        {/* Следы распила появляются по мере прогресса */}
-        {item.progress > 0 && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            {Array.from({ length: Math.min(4, Math.floor(item.progress / 25)) }).map((_, i) => (
-              <div key={i} className="absolute w-8 h-0.5 bg-white/90 rounded-full shadow-sm"
-                style={{ transform: `rotate(${-32 + i * 21}deg)` }} />
-            ))}
-          </div>
-        )}
-        {item.progress > 0 && item.progress < 100 && (
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5">
-            <div className="w-10 h-2 bg-amber-200 rounded-full overflow-hidden">
-              <motion.div className="h-full bg-emerald-500 rounded-full" animate={{ width: `${item.progress}%` }} transition={{ duration: 0.2 }} />
-            </div>
-            <span className="text-[7px] font-black text-emerald-700 leading-none">{Math.round(item.progress)}%</span>
-          </div>
-        )}
-        {item.state === 'raw' && (
-          <motion.div
-            animate={{ x: [-3, 3, -3] }} transition={{ repeat: Infinity, duration: 0.9 }}
-            className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-600 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow"
-          >↔ Пили!</motion.div>
-        )}
-      </motion.div>
-    );
-  };
 
   // ── СКОВОРОДА: жарится сама на горячей сковороде; готовое снимай тапом ──
   const renderFryItem = (item: PrepItem) => {
@@ -442,18 +331,29 @@ export function KitchenView({
       {/* 2×2 Station Grid — гибкая высота: делит место с зоной сборки, не вылезая за экран */}
       <div className="grid grid-cols-2 grid-rows-2 gap-1.5 p-1.5 min-h-0" style={{ flex: '1.5 1 0' }}>
 
-        {/* CUTTING BOARD */}
-        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-amber-500 shadow-md"
-          style={{ background: 'linear-gradient(135deg, #d4a055 0%, #b8813a 50%, #d4a055 100%)' }}>
-          <div className="absolute inset-0 opacity-30 pointer-events-none"
-            style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 7px, rgba(0,0,0,0.12) 7px, rgba(0,0,0,0.12) 8px)' }} />
+        {/* CUTTING BOARD — светлая столешница, чтобы доска KnifeAnimation выделялась */}
+        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-amber-300 bg-amber-50 shadow-md">
           <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 z-10 shrink-0">
             <span className="text-sm">🔪</span>
-            <span className="text-[9px] font-black text-amber-900 uppercase tracking-wide">Разделочная</span>
+            <span className="text-[9px] font-black text-amber-800 uppercase tracking-wide">Разделочная</span>
           </div>
-          <div className="flex-1 flex items-center justify-center gap-1 flex-wrap px-1 z-10 overflow-hidden">
+          <div className="flex-1 flex items-center justify-center gap-1.5 flex-wrap px-1 z-10 overflow-hidden">
             <AnimatePresence>
-              {boardItems.map(item => renderCuttingItem(item))}
+              {boardItems.map(item => (
+                <motion.div
+                  key={item.id}
+                  initial={{ scale: 0, y: -16 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0 }}
+                >
+                  <KnifeAnimation
+                    icon={INGREDIENTS[item.ingredientId].icon}
+                    progress={item.progress}
+                    state={item.state}
+                    onCut={(amount) => onProcessItem(item.id, 'cut', amount)}
+                  />
+                </motion.div>
+              ))}
             </AnimatePresence>
             {boardItems.length === 0 && (
               <div className="text-amber-800/40 text-[9px] font-bold text-center px-1">Овощи</div>

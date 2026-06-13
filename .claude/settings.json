@@ -8,7 +8,17 @@
       "Bash(npx tsc *)",
       "Bash(npx vite *)",
       "Bash(git init *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git rev-list *)",
+      "Bash(awk -F'\\\\t' '{count[$1]++; names[$1]=names[$1]\", \"$2} END{for\\(i in count\\) if\\(count[i]>1\\) print count[i]\"  \"i\"  =>\"names[i]}')",
+      "Bash(awk -F'\\\\t' '{c[$1]++} END{d=0; for\\(i in c\\) if\\(c[i]>1\\){print \"DUP:\",c[i],i; d++} if\\(d==0\\) print \"Дубликатов нет\"}')",
+      "Bash(git checkout *)",
+      "Bash(node fixicons.mjs)",
+      "Bash(node -e ' *)",
+      "Bash(echo \"EXIT $?\")",
+      "Bash(node -e \"try{console.log\\('@types/react', require\\('./node_modules/@types/react/package.json'\\).version\\)}catch\\(e\\){console.log\\('no @types/react'\\)}; console.log\\('react', require\\('./node_modules/react/package.json'\\).version\\)\")"
     ]
   }
 }
