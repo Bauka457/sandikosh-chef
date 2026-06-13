@@ -32,11 +32,13 @@ export function MenuScreen({ profile, onStart, onEditProfile, onProfileUpdate }:
   };
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-center bg-orange-50 relative overflow-hidden">
+    <div className="flex-1 flex flex-col bg-orange-50 relative overflow-hidden">
       {/* Background decoration */}
       <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle, #f59e0b 2px, transparent 2px)', backgroundSize: '30px 30px' }} />
 
-      <div className="z-10 flex flex-col items-center max-w-sm w-full px-6 gap-5">
+      {/* Прокручиваемая область: контент центрируется, если влезает, и скроллится, если нет */}
+      <div className="relative z-10 flex-1 w-full overflow-y-auto flex flex-col" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div className="my-auto flex flex-col items-center max-w-sm w-full mx-auto px-6 gap-4 py-5">
         {/* Logo/Title */}
         <motion.div
           initial={{ scale: 0.8, y: -50, opacity: 0 }}
@@ -44,13 +46,13 @@ export function MenuScreen({ profile, onStart, onEditProfile, onProfileUpdate }:
           transition={{ type: 'spring', bounce: 0.6 }}
           className="text-center"
         >
-          <div className="text-8xl drop-shadow-2xl mb-2 flex justify-center gap-2">
+          <div className="text-6xl drop-shadow-2xl mb-1 flex justify-center gap-2">
             <span className="animate-bounce">🐻</span>
             <span className="animate-bounce" style={{ animationDelay: '0.1s' }}>🍔</span>
           </div>
-          <h1 className="text-4xl font-black text-amber-900 drop-shadow-sm uppercase tracking-wider">
+          <h1 className="text-3xl font-black text-amber-900 drop-shadow-sm uppercase tracking-wide leading-none">
             Кухня
-            <span className="block text-5xl text-orange-500 mt-1">Бауки</span>
+            <span className="block text-4xl text-orange-500 mt-1">Бауки</span>
           </h1>
         </motion.div>
 
@@ -144,10 +146,11 @@ export function MenuScreen({ profile, onStart, onEditProfile, onProfileUpdate }:
             onClick={() => setUpgradesOpen(true)}
             className="w-full bg-amber-50 border-2 border-amber-300 text-amber-800 rounded-xl p-3 font-black text-sm shadow-sm active:scale-95 transition-transform flex items-center justify-center gap-2"
           >
-            🔧 Прокачать кухню
-            <span className="bg-amber-200 text-amber-800 text-[10px] px-2 py-0.5 rounded-full">💰 {profile.totalCoins}</span>
+            <span className="whitespace-nowrap">🔧 Прокачать кухню</span>
+            <span className="bg-amber-200 text-amber-800 text-[10px] px-2 py-0.5 rounded-full shrink-0">💰 {profile.totalCoins}</span>
           </button>
         </motion.div>
+      </div>
       </div>
 
       {/* ── Upgrades modal ── */}
