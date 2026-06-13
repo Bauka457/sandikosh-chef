@@ -1034,8 +1034,8 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
 
       {/* ── Customers area ── */}
       {mode !== 'free' ? (
-        <div className="bg-amber-100 relative flex items-end pb-2 gap-3 px-4 overflow-x-auto overflow-y-hidden shrink-0 border-b-4 border-orange-300 shadow-inner"
-          style={{ minHeight: '7.5rem', maxHeight: '10rem', WebkitOverflowScrolling: 'touch', scrollSnapType: 'x proximity' }}>
+        <div className="bg-amber-100 relative flex items-end pb-1.5 pt-1 gap-3 px-4 overflow-x-auto overflow-y-hidden shrink-0 border-b-4 border-orange-300 shadow-inner"
+          style={{ height: '8.5rem', WebkitOverflowScrolling: 'touch', scrollSnapType: 'x proximity' }}>
           <div className="absolute inset-0 opacity-10 pointer-events-none"
             style={{ backgroundImage: 'radial-gradient(circle, #f59e0b 2px, transparent 2px)', backgroundSize: '18px 18px' }} />
           <div className="absolute bottom-0 w-full h-6 bg-orange-300 rounded-t-xl" />

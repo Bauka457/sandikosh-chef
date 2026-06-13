@@ -39,11 +39,11 @@ export function CustomerCard({
       initial={{ opacity: 0, y: 30 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.8 }}
-      className="relative flex flex-col items-center w-28 shrink-0"
+      className="relative flex flex-col items-center w-24 shrink-0"
     >
       {/* ── SPEECH ZONE (always visible above character) ── */}
-      {/* z-20 > character button's z-10: the chapalk button overflows h-14 and must stay tappable */}
-      <div className="relative z-20 w-full h-14 flex items-center justify-center px-1">
+      {/* z-20 > character button's z-10: the chapalk button overflows and must stay tappable */}
+      <div className="relative z-20 w-full h-11 flex items-center justify-center px-1">
         <AnimatePresence mode="wait">
           {/* Bauka dialog (highest priority) */}
           {isBauka && baukaDialog ? (
@@ -167,7 +167,7 @@ export function CustomerCard({
           repeatDelay: isPanic ? 0.05 : 0.3,
         }}
         className={cn(
-          "relative flex items-center justify-center w-20 h-20 rounded-full shadow-lg border-4 transition-all z-10",
+          "relative flex items-center justify-center w-16 h-16 rounded-full shadow-lg border-4 transition-all z-10",
           character.color,
           canServe && order.status === 'waiting' && !isDislike ? 'border-green-400 scale-105 cursor-pointer' : 'border-transparent',
           isPanic && !isDislike && 'ring-4 ring-rose-400 ring-offset-2 ring-offset-amber-100',
@@ -177,7 +177,7 @@ export function CustomerCard({
         )}
         whileTap={canServe && order.status === 'waiting' && !isDislike ? { scale: 0.9 } : undefined}
       >
-        <div className="text-4xl">{character.animal}</div>
+        <div className="text-3xl">{character.animal}</div>
 
         {/* Floating hearts when loving */}
         {isLoving && ['✨', '💖', '⭐'].map((star, i) => (
@@ -215,19 +215,14 @@ export function CustomerCard({
 
       {/* ── TIMER BAR ── */}
       {order.status === 'waiting' && order.maxTime > 30 && !isDislike && !isLoving && (
-        <div className="w-full mt-1.5 flex flex-col items-center gap-0.5">
-          <div className="w-full h-3 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+        <div className="w-full mt-1 flex flex-col items-center gap-0.5">
+          <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden shadow-inner">
             <motion.div
               className={cn('h-full rounded-full transition-colors duration-300', timerColor)}
               animate={{ width: `${timerPct}%` }}
               transition={{ duration: 0.4 }}
             />
           </div>
-          {!isPanic && (
-            <div className={cn("text-[9px] font-black tabular-nums", isWarning ? 'text-amber-500' : 'text-slate-400')}>
-              ⏱ {order.timeLeft}с
-            </div>
-          )}
         </div>
       )}
     </motion.div>

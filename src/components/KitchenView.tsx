@@ -439,8 +439,8 @@ export function KitchenView({
   return (
     <div className="flex-1 flex flex-col bg-amber-50 relative overflow-hidden">
 
-      {/* 2×2 Station Grid — fixed height so assembly always has room */}
-      <div className="grid grid-cols-2 gap-1.5 p-1.5 shrink-0" style={{ height: '46%', minHeight: 190, maxHeight: 260 }}>
+      {/* 2×2 Station Grid — гибкая высота: делит место с зоной сборки, не вылезая за экран */}
+      <div className="grid grid-cols-2 grid-rows-2 gap-1.5 p-1.5 min-h-0" style={{ flex: '1.5 1 0' }}>
 
         {/* CUTTING BOARD */}
         <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-amber-500 shadow-md"
@@ -532,8 +532,8 @@ export function KitchenView({
       </div>
 
       {/* OVEN — печётся сама, занимает узкую полосу */}
-      <div className="relative mx-1.5 mb-1.5 rounded-2xl overflow-hidden flex items-center border-4 border-red-400 shadow-md shrink-0"
-        style={{ background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', minHeight: 60 }}>
+      <div className="relative mx-1.5 mb-1 rounded-2xl overflow-hidden flex items-center border-4 border-red-400 shadow-md shrink-0"
+        style={{ background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', height: 52 }}>
         <div className="flex items-center gap-1 px-2 shrink-0 z-10">
           <span className="text-sm">🌡️</span>
           <span className="text-[9px] font-black text-red-700 uppercase tracking-wide leading-tight">Духовка<br/>180°</span>
@@ -602,7 +602,8 @@ export function KitchenView({
       )}
 
       {/* Assembly Zone */}
-      <div className="flex-1 bg-white rounded-t-2xl border-t-2 border-amber-200 flex gap-2 p-2 min-h-0 shadow-inner overflow-hidden">
+      <div className="bg-white rounded-t-2xl border-t-2 border-amber-200 flex gap-2 p-2 min-h-0 shadow-inner overflow-hidden"
+        style={{ flex: '1 1 0', minHeight: 120 }}>
 
         {/* Ready items column */}
         <div className="w-16 border-r-2 border-amber-100 flex flex-col items-center gap-1 py-1 overflow-y-auto shrink-0"
