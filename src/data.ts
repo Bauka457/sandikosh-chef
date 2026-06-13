@@ -75,7 +75,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   cheese_burger: {
-    id: 'cheese_burger', name: 'Чизбургер', icon: '🍔', category: 'fastfood', price: 60,
+    id: 'cheese_burger', name: 'Чизбургер', icon: '🧀', category: 'fastfood', price: 60,
     servingGrams: 300, difficulty: 1, doneness: 'well-done',
     tip: 'Сыр кладут горячим — он тает!',
     cuisine: 'Американская',
@@ -87,7 +87,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   bacon_burger: {
-    id: 'bacon_burger', name: 'Бекон Бургер', icon: '🍔', category: 'fastfood', price: 75,
+    id: 'bacon_burger', name: 'Бекон Бургер', icon: '🥓', category: 'fastfood', price: 75,
     servingGrams: 380, difficulty: 2, doneness: 'well-done',
     tip: 'Бекон жарь до хрустящей корочки!',
     cuisine: 'Американская',
@@ -100,7 +100,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   double_burger: {
-    id: 'double_burger', name: 'Двойной Бургер', icon: '🍔', category: 'fastfood', price: 95,
+    id: 'double_burger', name: 'Двойной Бургер', icon: '🍱', category: 'fastfood', price: 95,
     servingGrams: 500, difficulty: 2, doneness: 'well-done',
     tip: 'Две котлеты — двойное счастье!',
     cuisine: 'Американская',
@@ -113,7 +113,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   fish_burger: {
-    id: 'fish_burger', name: 'Рыбный Бургер', icon: '🍔', category: 'seafood', price: 70,
+    id: 'fish_burger', name: 'Рыбный Бургер', icon: '🐡', category: 'seafood', price: 70,
     servingGrams: 300, difficulty: 2, doneness: 'fully-cooked',
     tip: 'Рыбу жарь на средним огне!', cuisine: 'Морская',
     steps: [
@@ -124,7 +124,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   mushroom_burger: {
-    id: 'mushroom_burger', name: 'Грибной Бургер', icon: '🍔', category: 'meat', price: 80,
+    id: 'mushroom_burger', name: 'Грибной Бургер', icon: '🍄', category: 'meat', price: 80,
     servingGrams: 380, difficulty: 2, doneness: 'well-done',
     tip: 'Грибы нарежь потоньше!', cuisine: 'Фьюжн',
     steps: [
@@ -157,7 +157,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   veggie_sandwich: {
-    id: 'veggie_sandwich', name: 'Вегги Сэндвич', icon: '🥪', category: 'healthy', price: 45,
+    id: 'veggie_sandwich', name: 'Вегги Сэндвич', icon: '🥙', category: 'healthy', price: 45,
     servingGrams: 280, difficulty: 1,
     tip: 'Овощи должны быть свежими!', cuisine: 'Здоровая',
     steps: [
@@ -169,7 +169,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   grilled_cheese: {
-    id: 'grilled_cheese', name: 'Гриль-Сыр', icon: '🧀', category: 'fastfood', price: 40,
+    id: 'grilled_cheese', name: 'Гриль-Сыр', icon: '🫕', category: 'fastfood', price: 40,
     servingGrams: 120, difficulty: 1, ovenTemp: 180, doneness: 'golden',
     tip: 'Масло не жалей — будет хрустящим!', cuisine: 'Американская',
     steps: [
@@ -179,7 +179,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   bruschetta: {
-    id: 'bruschetta', name: 'Брускетта', icon: '🍞', category: 'healthy', price: 55,
+    id: 'bruschetta', name: 'Брускетта', icon: '🫓', category: 'healthy', price: 55,
     servingGrams: 180, difficulty: 1, ovenTemp: 200,
     tip: 'Помидоры нарежь мелко!', cuisine: 'Итальянская',
     steps: [
@@ -228,7 +228,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   t_bone_steak: {
-    id: 't_bone_steak', name: 'T-Bone Стейк', icon: '🥩', category: 'meat', price: 150,
+    id: 't_bone_steak', name: 'T-Bone Стейк', icon: '🍴', category: 'meat', price: 150,
     servingGrams: 350, difficulty: 3, ovenTemp: 200, doneness: 'medium-rare',
     cookTimeSec: 480, tip: 'Готовь 4 мин с каждой стороны при 200°C!', cuisine: 'Американская',
     steps: [
@@ -238,7 +238,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   pork_chop: {
-    id: 'pork_chop', name: 'Свиная Отбивная', icon: '🍖', category: 'meat', price: 85,
+    id: 'pork_chop', name: 'Свиная Отбивная', icon: '🐷', category: 'meat', price: 85,
     servingGrams: 400, difficulty: 2, ovenTemp: 180, doneness: 'well-done',
     cookTimeSec: 360, tip: 'Свинину всегда доводи до готовности!', cuisine: 'Европейская',
     steps: [
@@ -258,7 +258,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   schnitzel: {
-    id: 'schnitzel', name: 'Шницель', icon: '🥩', category: 'meat', price: 90,
+    id: 'schnitzel', name: 'Шницель', icon: '🍤', category: 'meat', price: 90,
     servingGrams: 220, difficulty: 2, doneness: 'golden',
     tip: 'Обваляй в муке перед жаркой!', cuisine: 'Австрийская',
     steps: [
@@ -269,7 +269,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   meatballs: {
-    id: 'meatballs', name: 'Тефтели', icon: '🍲', category: 'meat', price: 70,
+    id: 'meatballs', name: 'Тефтели', icon: '🧆', category: 'meat', price: 70,
     servingGrams: 300, difficulty: 2, doneness: 'fully-cooked',
     tip: 'Лук придаёт сочность!', cuisine: 'Европейская',
     steps: [
@@ -279,7 +279,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   chicken_wings: {
-    id: 'chicken_wings', name: 'Куриные Крылья', icon: '🍗', category: 'meat', price: 65,
+    id: 'chicken_wings', name: 'Куриные Крылья', icon: '🍢', category: 'meat', price: 65,
     servingGrams: 400, difficulty: 2, ovenTemp: 200, doneness: 'crispy',
     cookTimeSec: 360, tip: 'Запекай до хрустящей корочки!', cuisine: 'Американская',
     steps: [
@@ -299,7 +299,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   turkey_breast: {
-    id: 'turkey_breast', name: 'Грудка Индейки', icon: '🍗', category: 'meat', price: 95,
+    id: 'turkey_breast', name: 'Грудка Индейки', icon: '🦃', category: 'meat', price: 95,
     servingGrams: 300, difficulty: 2, ovenTemp: 165, doneness: 'fully-cooked',
     cookTimeSec: 480, tip: 'Масло не дает пересохнуть!', cuisine: 'Европейская',
     steps: [
@@ -309,7 +309,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   lamb_kebab: {
-    id: 'lamb_kebab', name: 'Люля-Кебаб', icon: '🍢', category: 'meat', price: 110,
+    id: 'lamb_kebab', name: 'Люля-Кебаб', icon: '🍡', category: 'meat', price: 110,
     servingGrams: 300, difficulty: 3, doneness: 'medium',
     tip: 'Перец придаёт пикантность!', cuisine: 'Кавказская',
     steps: [
@@ -319,7 +319,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   chicken_schnitzel: {
-    id: 'chicken_schnitzel', name: 'Куриный Шницель', icon: '🍗', category: 'meat', price: 80,
+    id: 'chicken_schnitzel', name: 'Куриный Шницель', icon: '🐔', category: 'meat', price: 80,
     servingGrams: 200, difficulty: 2, doneness: 'golden',
     tip: 'Отбей курицу перед жаркой!', cuisine: 'Европейская',
     steps: [
@@ -329,7 +329,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   beef_stroganoff: {
-    id: 'beef_stroganoff', name: 'Бефстроганов', icon: '🍲', category: 'meat', price: 95,
+    id: 'beef_stroganoff', name: 'Бефстроганов', icon: '🐮', category: 'meat', price: 95,
     servingGrams: 350, difficulty: 3, doneness: 'medium',
     tip: 'Крем делает соус нежным!', cuisine: 'Русская',
     steps: [
@@ -340,7 +340,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   steak_with_veg: {
-    id: 'steak_with_veg', name: 'Стейк с Овощами', icon: '🥩', category: 'meat', price: 100,
+    id: 'steak_with_veg', name: 'Стейк с Овощами', icon: '🍽️', category: 'meat', price: 100,
     servingGrams: 400, difficulty: 2, doneness: 'medium',
     tip: 'Овощи добавляют баланс вкуса!', cuisine: 'Европейская',
     steps: [
@@ -387,7 +387,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   chicken_soup: {
-    id: 'chicken_soup', name: 'Куриный Суп', icon: '🥣', category: 'soup', price: 65,
+    id: 'chicken_soup', name: 'Куриный Суп', icon: '🥘', category: 'soup', price: 65,
     servingGrams: 450, difficulty: 2,
     tip: 'Морковь и лук — основа бульона!', cuisine: 'Европейская',
     steps: [
@@ -398,7 +398,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   fish_chowder: {
-    id: 'fish_chowder', name: 'Рыбный Чаудер', icon: '🥣', category: 'seafood', price: 80,
+    id: 'fish_chowder', name: 'Рыбный Чаудер', icon: '🦪', category: 'seafood', price: 80,
     servingGrams: 450, difficulty: 2,
     tip: 'Картофель загустит суп!', cuisine: 'Американская',
     steps: [
@@ -421,7 +421,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   onion_soup: {
-    id: 'onion_soup', name: 'Луковый Суп', icon: '🥣', category: 'soup', price: 70,
+    id: 'onion_soup', name: 'Луковый Суп', icon: '🧅', category: 'soup', price: 70,
     servingGrams: 350, difficulty: 2,
     tip: 'Карамелизируй лук 20 мин на маленьком огне!', cuisine: 'Французская',
     steps: [
@@ -432,7 +432,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   pea_soup: {
-    id: 'pea_soup', name: 'Гороховый Суп', icon: '🥣', category: 'soup', price: 60,
+    id: 'pea_soup', name: 'Гороховый Суп', icon: '🫛', category: 'soup', price: 60,
     servingGrams: 450, difficulty: 2,
     tip: 'Горох вари до полного размягчения!', cuisine: 'Русская',
     steps: [
@@ -443,7 +443,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   gazpacho: {
-    id: 'gazpacho', name: 'Гаспачо', icon: '🍅', category: 'healthy', price: 65,
+    id: 'gazpacho', name: 'Гаспачо', icon: '🫑', category: 'healthy', price: 65,
     servingGrams: 350, difficulty: 2,
     tip: 'Подавай холодным — освежает!', cuisine: 'Испанская',
     steps: [
@@ -454,7 +454,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   lentil_soup: {
-    id: 'lentil_soup', name: 'Чечевичный Суп', icon: '🥣', category: 'soup', price: 55,
+    id: 'lentil_soup', name: 'Чечевичный Суп', icon: '🫘', category: 'soup', price: 55,
     servingGrams: 450, difficulty: 1,
     tip: 'Полезный и сытный!', cuisine: 'Ближневосточная',
     steps: [
@@ -465,7 +465,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   stew: {
-    id: 'stew', name: 'Рагу', icon: '🍲', category: 'meat', price: 100,
+    id: 'stew', name: 'Рагу', icon: '🍛', category: 'meat', price: 100,
     servingGrams: 500, difficulty: 2,
     tip: 'Тушить овощи не менее 30 минут!', cuisine: 'Европейская',
     steps: [
@@ -493,7 +493,7 @@ export const RECIPES: Record<string, Recipe> = {
   // ПАСТА & РИС
   // =========================================
   pasta_pomodoro: {
-    id: 'pasta_pomodoro', name: 'Паста Помодоро', icon: '🍝', category: 'pasta', price: 55,
+    id: 'pasta_pomodoro', name: 'Паста Помодоро', icon: '🥫', category: 'pasta', price: 55,
     servingGrams: 350, difficulty: 1, doneness: 'al-dente',
     tip: 'Варить пасту «al dente» — 1 мин до указанного времени!', cuisine: 'Итальянская',
     steps: [
@@ -514,7 +514,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   pasta_bolognese: {
-    id: 'pasta_bolognese', name: 'Болоньезе', icon: '🍝', category: 'pasta', price: 85,
+    id: 'pasta_bolognese', name: 'Болоньезе', icon: '🌶️', category: 'pasta', price: 85,
     servingGrams: 400, difficulty: 2, doneness: 'al-dente',
     tip: 'Соус тушить не менее 30 мин!', cuisine: 'Итальянская',
     steps: [
@@ -525,7 +525,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   pasta_pesto: {
-    id: 'pasta_pesto', name: 'Паста Песто', icon: '🍝', category: 'pasta', price: 80,
+    id: 'pasta_pesto', name: 'Паста Песто', icon: '🌿', category: 'pasta', price: 80,
     servingGrams: 350, difficulty: 2, doneness: 'al-dente',
     tip: 'Зелень — основа аромата песто!', cuisine: 'Итальянская',
     steps: [
@@ -548,7 +548,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   seafood_pasta: {
-    id: 'seafood_pasta', name: 'Морская Паста', icon: '🍝', category: 'seafood', price: 120,
+    id: 'seafood_pasta', name: 'Морская Паста', icon: '🦞', category: 'seafood', price: 120,
     servingGrams: 400, difficulty: 3, doneness: 'al-dente',
     tip: 'Морепродукты готовятся быстро — не пережарь!', cuisine: 'Итальянская',
     steps: [
@@ -559,7 +559,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   mac_and_cheese: {
-    id: 'mac_and_cheese', name: 'Мак-н-Чиз', icon: '🧀', category: 'fastfood', price: 65,
+    id: 'mac_and_cheese', name: 'Мак-н-Чиз', icon: '🥮', category: 'fastfood', price: 65,
     servingGrams: 350, difficulty: 1,
     tip: 'Молоко делает соус сливочным!', cuisine: 'Американская',
     steps: [
@@ -570,7 +570,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   fried_rice: {
-    id: 'fried_rice', name: 'Жареный Рис', icon: '🍳', category: 'asian', price: 60,
+    id: 'fried_rice', name: 'Жареный Рис', icon: '🥡', category: 'asian', price: 60,
     servingGrams: 350, difficulty: 2,
     tip: 'Используй вчерашний рис — он лучше жарится!', cuisine: 'Азиатская',
     steps: [
@@ -581,7 +581,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   paella: {
-    id: 'paella', name: 'Паэлья', icon: '🍳', category: 'seafood', price: 140,
+    id: 'paella', name: 'Паэлья', icon: '🦀', category: 'seafood', price: 140,
     servingGrams: 500, difficulty: 3,
     tip: 'Готовить без крышки на сильном огне!', cuisine: 'Испанская',
     steps: [
@@ -593,7 +593,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   pasta_alfredo: {
-    id: 'pasta_alfredo', name: 'Паста Альфредо', icon: '🍝', category: 'pasta', price: 85,
+    id: 'pasta_alfredo', name: 'Паста Альфредо', icon: '🥛', category: 'pasta', price: 85,
     servingGrams: 380, difficulty: 2, doneness: 'al-dente',
     tip: 'Крем должен быть теплым, не горячим!', cuisine: 'Итальянская',
     steps: [
@@ -640,7 +640,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   fish_chips: {
-    id: 'fish_chips', name: 'Фиш & Чипс', icon: '🐟', category: 'fastfood', price: 75,
+    id: 'fish_chips', name: 'Фиш & Чипс', icon: '🦈', category: 'fastfood', price: 75,
     servingGrams: 350, difficulty: 2, doneness: 'crispy',
     tip: 'Картошку жарь во фритюре!', cuisine: 'Британская',
     steps: [
@@ -649,7 +649,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   fish_tacos: {
-    id: 'fish_tacos', name: 'Рыбные Тако', icon: '🌮', category: 'mexican', price: 80,
+    id: 'fish_tacos', name: 'Рыбные Тако', icon: '🦑', category: 'mexican', price: 80,
     servingGrams: 300, difficulty: 2,
     tip: 'Рыба и свежие овощи — идеальный тако!', cuisine: 'Мексиканская',
     steps: [
@@ -660,7 +660,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   prawn_cocktail: {
-    id: 'prawn_cocktail', name: 'Коктейль из Креветок', icon: '🦐', category: 'seafood', price: 90,
+    id: 'prawn_cocktail', name: 'Коктейль из Креветок', icon: '🍹', category: 'seafood', price: 90,
     servingGrams: 250, difficulty: 2,
     tip: 'Подавай охлаждённым!', cuisine: 'Европейская',
     steps: [
@@ -671,7 +671,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   tuna_salad: {
-    id: 'tuna_salad', name: 'Салат с Тунцом', icon: '🥗', category: 'seafood', price: 70,
+    id: 'tuna_salad', name: 'Салат с Тунцом', icon: '🐙', category: 'seafood', price: 70,
     servingGrams: 300, difficulty: 1,
     tip: 'Свежий огурец даёт хруст!', cuisine: 'Европейская',
     steps: [
@@ -682,7 +682,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   sushi_nigiri: {
-    id: 'sushi_nigiri', name: 'Нигири', icon: '🍱', category: 'asian', price: 90,
+    id: 'sushi_nigiri', name: 'Нигири', icon: '🍙', category: 'asian', price: 90,
     servingGrams: 200, difficulty: 3,
     tip: 'Рис лепи пальцами, рыбу клади сверху!', cuisine: 'Японская',
     steps: [
@@ -705,7 +705,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   chicken_salad: {
-    id: 'chicken_salad', name: 'Цезарь', icon: '🥗', category: 'healthy', price: 75,
+    id: 'chicken_salad', name: 'Цезарь', icon: '🥬', category: 'healthy', price: 75,
     servingGrams: 350, difficulty: 2,
     tip: 'Курица должна быть горячей, листья — холодными!', cuisine: 'Американская',
     steps: [
@@ -716,7 +716,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   greek_salad: {
-    id: 'greek_salad', name: 'Греческий Салат', icon: '🥗', category: 'healthy', price: 65,
+    id: 'greek_salad', name: 'Греческий Салат', icon: '🫒', category: 'healthy', price: 65,
     servingGrams: 300, difficulty: 1,
     tip: 'Фета — обязательный компонент!', cuisine: 'Греческая',
     steps: [
@@ -728,7 +728,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   caprese_salad: {
-    id: 'caprese_salad', name: 'Капрезе', icon: '🍅', category: 'healthy', price: 60,
+    id: 'caprese_salad', name: 'Капрезе', icon: '🍒', category: 'healthy', price: 60,
     servingGrams: 250, difficulty: 1,
     tip: 'Чередуй помидор-сыр-помидор!', cuisine: 'Итальянская',
     steps: [
@@ -738,7 +738,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   nicoise_salad: {
-    id: 'nicoise_salad', name: 'Салат Нисуаз', icon: '🥗', category: 'healthy', price: 75,
+    id: 'nicoise_salad', name: 'Салат Нисуаз', icon: '🥒', category: 'healthy', price: 75,
     servingGrams: 350, difficulty: 2,
     tip: 'Яйцо вари вкрутую 10 минут!', cuisine: 'Французская',
     steps: [
@@ -760,7 +760,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   quinoa_bowl: {
-    id: 'quinoa_bowl', name: 'Боул с Киноа', icon: '🥣', category: 'healthy', price: 85,
+    id: 'quinoa_bowl', name: 'Боул с Киноа', icon: '🥜', category: 'healthy', price: 85,
     servingGrams: 400, difficulty: 2,
     tip: 'Киноа — суперфуд с полным набором белков!', cuisine: 'Фьюжн',
     steps: [
@@ -771,7 +771,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   cobb_salad: {
-    id: 'cobb_salad', name: 'Салат Кобб', icon: '🥗', category: 'healthy', price: 80,
+    id: 'cobb_salad', name: 'Салат Кобб', icon: '🥕', category: 'healthy', price: 80,
     servingGrams: 400, difficulty: 2,
     tip: 'Укладывай компоненты полосками!', cuisine: 'Американская',
     steps: [
@@ -797,7 +797,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   scrambled_eggs: {
-    id: 'scrambled_eggs', name: 'Яйца Болтунья', icon: '🍳', category: 'breakfast', price: 35,
+    id: 'scrambled_eggs', name: 'Яйца Болтунья', icon: '🧈', category: 'breakfast', price: 35,
     servingGrams: 200, difficulty: 1,
     tip: 'Помешивай постоянно на слабом огне!', cuisine: 'Международная',
     steps: [
@@ -840,7 +840,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   eggs_benedict: {
-    id: 'eggs_benedict', name: 'Яйца Бенедикт', icon: '🍳', category: 'breakfast', price: 85,
+    id: 'eggs_benedict', name: 'Яйца Бенедикт', icon: '🥯', category: 'breakfast', price: 85,
     servingGrams: 280, difficulty: 3,
     tip: 'Яйцо пашот: 3 мин в едва кипящей воде!', cuisine: 'Американская',
     steps: [
@@ -863,7 +863,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   avocado_eggs: {
-    id: 'avocado_eggs', name: 'Авокадо с Яйцом', icon: '🥑', category: 'breakfast', price: 65,
+    id: 'avocado_eggs', name: 'Авокадо с Яйцом', icon: '🥝', category: 'breakfast', price: 65,
     servingGrams: 250, difficulty: 2,
     tip: 'Авокадо и яйцо — идеальный белково-жировой завтрак!', cuisine: 'Современная',
     steps: [
@@ -942,7 +942,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   cheesecake: {
-    id: 'cheesecake', name: 'Чизкейк', icon: '🍰', category: 'sweet', price: 120,
+    id: 'cheesecake', name: 'Чизкейк', icon: '🍓', category: 'sweet', price: 120,
     servingGrams: 250, difficulty: 3, ovenTemp: 160,
     cookTimeSec: 3600, tip: 'Выпекай на водяной бане чтобы не треснул!', cuisine: 'Американская',
     steps: [
@@ -1021,7 +1021,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   pie: {
-    id: 'pie', name: 'Круглый Пирог', icon: '🥧', category: 'sweet', price: 130,
+    id: 'pie', name: 'Круглый Пирог', icon: '🫐', category: 'sweet', price: 130,
     servingGrams: 350, difficulty: 2, ovenTemp: 180,
     cookTimeSec: 2400, tip: 'Делай решётку из теста сверху!', cuisine: 'Американская',
     steps: [
@@ -1051,7 +1051,7 @@ export const RECIPES: Record<string, Recipe> = {
   // АЗИАТСКАЯ КУХНЯ
   // =========================================
   pad_thai: {
-    id: 'pad_thai', name: 'Пад Тай', icon: '🍜', category: 'asian', price: 105,
+    id: 'pad_thai', name: 'Пад Тай', icon: '🍘', category: 'asian', price: 105,
     servingGrams: 400, difficulty: 3,
     tip: 'Соевый соус регулирует солёность!', cuisine: 'Тайская',
     steps: [
@@ -1073,7 +1073,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   dumplings: {
-    id: 'dumplings', name: 'Дим Сам', icon: '🥟', category: 'asian', price: 85,
+    id: 'dumplings', name: 'Дим Сам', icon: '🥠', category: 'asian', price: 85,
     servingGrams: 300, difficulty: 3, ovenTemp: 100,
     tip: 'Готовь на пару 8-10 минут!', cuisine: 'Китайская',
     steps: [
@@ -1084,7 +1084,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   teriyaki_chicken: {
-    id: 'teriyaki_chicken', name: 'Курица Терияки', icon: '🍗', category: 'asian', price: 95,
+    id: 'teriyaki_chicken', name: 'Курица Терияки', icon: '🥨', category: 'asian', price: 95,
     servingGrams: 300, difficulty: 2, doneness: 'fully-cooked',
     tip: 'Соевый соус карамелизируется — не жги!', cuisine: 'Японская',
     steps: [
@@ -1095,7 +1095,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   miso_soup: {
-    id: 'miso_soup', name: 'Мисо Суп', icon: '🍜', category: 'asian', price: 55,
+    id: 'miso_soup', name: 'Мисо Суп', icon: '🧄', category: 'asian', price: 55,
     servingGrams: 350, difficulty: 1,
     tip: 'Не кипяти после добавления мисо-пасты!', cuisine: 'Японская',
     steps: [
@@ -1105,7 +1105,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   gyoza: {
-    id: 'gyoza', name: 'Гёдза', icon: '🥟', category: 'asian', price: 80,
+    id: 'gyoza', name: 'Гёдза', icon: '🍶', category: 'asian', price: 80,
     servingGrams: 250, difficulty: 3, doneness: 'crispy',
     tip: 'Сначала обжарь, потом добавь воду и закрой крышку!', cuisine: 'Японская',
     steps: [
@@ -1116,7 +1116,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   bibimbap: {
-    id: 'bibimbap', name: 'Пибимпап', icon: '🍚', category: 'asian', price: 100,
+    id: 'bibimbap', name: 'Пибимпап', icon: '🍵', category: 'asian', price: 100,
     servingGrams: 450, difficulty: 2,
     tip: 'Рис должен быть тёплым, яйцо — с жидким желтком!', cuisine: 'Корейская',
     steps: [
@@ -1142,7 +1142,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   olivier_salad: {
-    id: 'olivier_salad', name: 'Салат Оливье', icon: '🥗', category: 'russian', price: 70,
+    id: 'olivier_salad', name: 'Салат Оливье', icon: '🥔', category: 'russian', price: 70,
     servingGrams: 400, difficulty: 2,
     tip: 'Все ингредиенты нарезать мелким кубиком!', cuisine: 'Русская',
     steps: [
@@ -1154,7 +1154,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   blini: {
-    id: 'blini', name: 'Блины', icon: '🥞', category: 'russian', price: 60,
+    id: 'blini', name: 'Блины', icon: '🍯', category: 'russian', price: 60,
     servingGrams: 250, difficulty: 2,
     tip: 'Первый блин — всегда комом! Продолжай!', cuisine: 'Русская',
     steps: [
@@ -1200,7 +1200,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   guacamole: {
-    id: 'guacamole', name: 'Гуакамоле', icon: '🥑', category: 'mexican', price: 55,
+    id: 'guacamole', name: 'Гуакамоле', icon: '🥦', category: 'mexican', price: 55,
     servingGrams: 200, difficulty: 1,
     tip: 'Авокадо разминай вилкой, не блендером!', cuisine: 'Мексиканская',
     steps: [
@@ -1211,7 +1211,7 @@ export const RECIPES: Record<string, Recipe> = {
     ]
   },
   quesadilla: {
-    id: 'quesadilla', name: 'Кесадилья', icon: '🫔', category: 'mexican', price: 70,
+    id: 'quesadilla', name: 'Кесадилья', icon: '🌽', category: 'mexican', price: 70,
     servingGrams: 300, difficulty: 2, doneness: 'golden',
     tip: 'Обжаривай с двух сторон до золотистости!', cuisine: 'Мексиканская',
     steps: [
