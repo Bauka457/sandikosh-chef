@@ -440,6 +440,7 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
     setPlate([]);
     setFinishedDish(null);
     setWrongDishInfo(null);
+    setPrepItems([]); // корзина сбрасывает всё, включая лишние ингредиенты в «Готово»
   };
 
   const handleResetAll = () => {

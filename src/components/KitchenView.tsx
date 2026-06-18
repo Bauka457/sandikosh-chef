@@ -51,28 +51,48 @@ export function KitchenView({
 
   const makeDragHandlers = (item: PrepItem) => ({
     onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => {
-      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+      // Указатель НЕ захватываем сразу — иначе список «Готово» не прокрутить.
+      // Решим по первому движению: вертикаль → скролл, горизонталь → перетаскивание.
       dragStartRef.current = { x: e.clientX, y: e.clientY };
       dragInfoRef.current = { over: false, moved: false };
-      setDrag({ item, x: e.clientX, y: e.clientY, over: false, moved: false });
     },
     onPointerMove: (e: ReactPointerEvent<HTMLDivElement>) => {
       const start = dragStartRef.current;
       if (!start) return;
-      const moved = Math.abs(e.clientX - start.x) > 6 || Math.abs(e.clientY - start.y) > 6;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+
+      // Перетаскивание ещё не началось — определяем намерение
+      if (!dragInfoRef.current?.moved) {
+        if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
+          // Вертикальный жест — это прокрутка списка, драг отменяем
+          dragStartRef.current = null;
+          return;
+        }
+        if (Math.abs(dx) > 8) {
+          // Горизонтальный жест — начинаем перетаскивание, теперь захватываем указатель
+          (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+          dragInfoRef.current = { over: false, moved: true };
+          setDrag({ item, x: e.clientX, y: e.clientY, over: false, moved: true });
+        }
+        return;
+      }
+
       const zone = dropRef.current?.getBoundingClientRect();
       const over = !!zone && e.clientX >= zone.left && e.clientX <= zone.right
         && e.clientY >= zone.top && e.clientY <= zone.bottom;
-      dragInfoRef.current = { over, moved };
-      setDrag({ item, x: e.clientX, y: e.clientY, over, moved });
+      dragInfoRef.current = { over, moved: true };
+      setDrag({ item, x: e.clientX, y: e.clientY, over, moved: true });
     },
     onPointerUp: () => {
       const info = dragInfoRef.current;
+      const started = dragStartRef.current !== null;
       dragStartRef.current = null;
       dragInfoRef.current = null;
       setDrag(null);
-      // Тап (без движения) или отпустили над тарелкой → пробуем положить
-      if (!info || !info.moved || info.over) onAssembleItem(item);
+      if (!info) return;                       // драг был отменён прокруткой
+      if (!info.moved && started) onAssembleItem(item); // тап на месте → положить
+      else if (info.moved && info.over) onAssembleItem(item); // отпустили над тарелкой
     },
     onPointerCancel: () => {
       dragStartRef.current = null;
@@ -662,16 +682,24 @@ export function KitchenView({
                       : 'bg-amber-50 border-amber-300',
                     isJustReady && 'ring-2 ring-emerald-400 ring-offset-1'
                   )}
-                  style={{ minWidth: 44, minHeight: 44, touchAction: 'none', opacity: isDragging ? 0.3 : 1 }}
+                  style={{ minWidth: 44, minHeight: 44, touchAction: 'pan-y', opacity: isDragging ? 0.3 : 1 }}
                   {...makeDragHandlers(item)}
                 >
                   {INGREDIENTS[item.ingredientId].icon}
+                  {/* Кнопка удаления — убрать случайный/лишний ингредиент */}
+                  <button
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => { e.stopPropagation(); haptic.medium(); onDiscardItem(item.id); }}
+                    aria-label="Убрать"
+                    className="absolute -top-1.5 -left-1.5 w-4 h-4 rounded-full bg-slate-700 text-white text-[9px] font-black flex items-center justify-center shadow z-30 active:scale-90 border border-white/40"
+                    style={{ touchAction: 'manipulation' }}
+                  >✕</button>
                   {/* Цветовая метка статуса (угол) */}
                   {status === 'next' && (
                     <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white text-[8px] font-black flex items-center justify-center shadow">✓</span>
                   )}
                   {status === 'wrong' && (
-                    <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 text-white text-[8px] font-black flex items-center justify-center shadow">✕</span>
+                    <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 text-white text-[8px] font-black flex items-center justify-center shadow">!</span>
                   )}
                   {isJustReady && (
                     <motion.div
