@@ -16,6 +16,7 @@ import { Coins, LogOut, BookOpen, Utensils, ChevronDown, ChevronUp, ShoppingBag,
 import { type BaukaPhase } from './components/CustomerCard';
 import { ComboToast } from './components/ComboToast';
 import { BaukaOverlay } from './components/BaukaOverlay';
+import { KitchenBackdrop } from './components/KitchenBackdrop';
 import { cn, haptic } from './utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -1034,11 +1035,13 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
 
       {/* ── Customers area ── */}
       {mode !== 'free' ? (
-        <div className="bg-amber-100 relative flex items-end pb-1.5 pt-1 gap-3 px-4 overflow-x-auto overflow-y-hidden shrink-0 border-b-4 border-orange-300 shadow-inner"
+        <div className="relative flex items-end pb-1.5 pt-1 gap-3 px-4 overflow-x-auto overflow-y-hidden shrink-0 border-b-4 border-rose-300 shadow-inner"
           style={{ height: '8.5rem', WebkitOverflowScrolling: 'touch', scrollSnapType: 'x proximity' }}>
-          <div className="absolute inset-0 opacity-10 pointer-events-none"
-            style={{ backgroundImage: 'radial-gradient(circle, #f59e0b 2px, transparent 2px)', backgroundSize: '18px 18px' }} />
-          <div className="absolute bottom-0 w-full h-6 bg-orange-300 rounded-t-xl" />
+          {/* Задник настоящей кухни: розовая стена, окно с зимой, шторы */}
+          <KitchenBackdrop />
+          {/* Столешница, у которой стоят гости */}
+          <div className="absolute bottom-0 w-full h-6 pointer-events-none"
+            style={{ background: 'linear-gradient(180deg, #93c5fd 0%, #60a5fa 100%)', boxShadow: 'inset 0 2px 0 rgba(255,255,255,0.4)' }} />
           <AnimatePresence>
             {orders.map(order => order.status === 'done' ? null : (
               <div key={order.id} className="relative z-10 shrink-0" style={{ scrollSnapAlign: 'start' }}>
@@ -1055,7 +1058,7 @@ export function GameScreen({ onQuit, mode, playerName, playerAvatar = '👨‍�
             ))}
           </AnimatePresence>
           {orders.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center text-amber-500/50 text-xs font-black uppercase tracking-wider">
+            <div className="absolute inset-0 flex items-center justify-center text-white/70 text-xs font-black uppercase tracking-wider drop-shadow">
               Ждём гостей…
             </div>
           )}

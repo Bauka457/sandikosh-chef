@@ -326,10 +326,19 @@ export function KitchenView({
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-amber-50 relative overflow-hidden">
+    <div className="flex-1 flex flex-col relative overflow-hidden">
+      {/* Голубая кафельная столешница, как на референсе кухни */}
+      <div className="absolute inset-0 pointer-events-none" style={{
+        background: 'linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)',
+      }} />
+      <div className="absolute inset-0 pointer-events-none opacity-50" style={{
+        backgroundImage:
+          'linear-gradient(rgba(255,255,255,0.7) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,0.7) 2px, transparent 2px)',
+        backgroundSize: '34px 34px',
+      }} />
 
       {/* 2×2 Station Grid — гибкая высота: делит место с зоной сборки, не вылезая за экран */}
-      <div className="grid grid-cols-2 grid-rows-2 gap-1.5 p-1.5 min-h-0" style={{ flex: '1.5 1 0' }}>
+      <div className="grid grid-cols-2 grid-rows-2 gap-1.5 p-1.5 min-h-0 relative z-10" style={{ flex: '1.5 1 0' }}>
 
         {/* CUTTING BOARD — светлая столешница, чтобы доска KnifeAnimation выделялась */}
         <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-amber-300 bg-amber-50 shadow-md">
@@ -433,7 +442,7 @@ export function KitchenView({
       </div>
 
       {/* OVEN — печётся сама, занимает узкую полосу */}
-      <div className="relative mx-1.5 mb-1 rounded-2xl overflow-hidden flex items-center border-4 border-red-400 shadow-md shrink-0"
+      <div className="relative z-10 mx-1.5 mb-1 rounded-2xl overflow-hidden flex items-center border-4 border-red-400 shadow-md shrink-0"
         style={{ background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', height: 52 }}>
         <div className="flex items-center gap-1 px-2 shrink-0 z-10">
           <span className="text-sm">🌡️</span>
@@ -451,7 +460,7 @@ export function KitchenView({
 
       {/* Quick Pick Bar */}
       {activeRecipe ? (
-        <div className="bg-white border-y-2 border-amber-200 px-2 py-1 flex items-center gap-1.5 overflow-x-auto shrink-0 shadow-sm"
+        <div className="relative z-10 bg-white border-y-2 border-amber-200 px-2 py-1 flex items-center gap-1.5 overflow-x-auto shrink-0 shadow-sm"
           style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="text-[9px] font-black text-amber-700 uppercase tracking-wide shrink-0 my-auto">
             {activeRecipe.icon}:
@@ -488,7 +497,7 @@ export function KitchenView({
         </div>
       ) : (
         /* Free mode без рецепта: показываем все ингредиенты, чтобы было понятно как готовить */
-        <div className="bg-white border-y-2 border-amber-200 px-2 py-1 flex items-center gap-1.5 overflow-x-auto shrink-0 shadow-sm"
+        <div className="relative z-10 bg-white border-y-2 border-amber-200 px-2 py-1 flex items-center gap-1.5 overflow-x-auto shrink-0 shadow-sm"
           style={{ WebkitOverflowScrolling: 'touch' }}>
           <div className="text-[9px] font-black text-amber-700 uppercase tracking-wide shrink-0 my-auto">Все:</div>
           {Object.values(INGREDIENTS).map(ing => (
@@ -503,7 +512,7 @@ export function KitchenView({
       )}
 
       {/* Assembly Zone */}
-      <div className="bg-white rounded-t-2xl border-t-2 border-amber-200 flex gap-2 p-2 min-h-0 shadow-inner overflow-hidden"
+      <div className="relative z-10 bg-white rounded-t-2xl border-t-2 border-amber-200 flex gap-2 p-2 min-h-0 shadow-inner overflow-hidden"
         style={{ flex: '1 1 0', minHeight: 120 }}>
 
         {/* Ready items column */}
