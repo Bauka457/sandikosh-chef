@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, type PointerEvent as ReactPointerEvent } f
 import { cn, haptic } from '../utils';
 import { playSound } from '../sound';
 import { KnifeAnimation } from './KnifeAnimation';
+import { Knob, Flames } from './StationDecor';
 
 interface Props {
   plate: IngredientType[];
@@ -99,11 +100,30 @@ export function KitchenView({
     prevPrepRef.current = prepItems;
   }, [prepItems]);
 
-  // ── Сковорода: температура (греется огнём 🔥, остывает сама) ──
+  // ── Сковорода: температура (греется при включённой конфорке, остывает сама) ──
   const [stoveTemp, setStoveTemp] = useState(0);
   const stoveTempRef = useRef(0);
   const heatingRef = useRef(false);
   const [isHeating, setIsHeating] = useState(false);
+
+  // ── Духовка: включается кнопкой, дверца открывается с анимацией ──
+  const [ovenOn, setOvenOn] = useState(false);
+  const ovenOnRef = useRef(false);
+
+  const toggleHeat = () => {
+    const v = !heatingRef.current;
+    heatingRef.current = v;
+    setIsHeating(v);
+    haptic.medium();
+    playSound(v ? 'sizzle' : 'ding');
+  };
+  const toggleOven = () => {
+    const v = !ovenOnRef.current;
+    ovenOnRef.current = v;
+    setOvenOn(v);
+    haptic.medium();
+    playSound(v ? 'sizzle' : 'ding');
+  };
 
   // Свежие ссылки для игрового цикла (обходим устаревшие замыкания)
   const processRef = useRef(onProcessItem);
@@ -124,25 +144,16 @@ export function KitchenView({
           if (it.state !== 'burned') processRef.current(it.id, 'cook', amt);
         });
       }
-      // Духовка печёт сама
-      ovenItemsRef.current.forEach(it => {
-        if (it.state !== 'burned' && it.progress < 100) processRef.current(it.id, 'bake', 2.5);
-      });
+      // Духовка печёт, только когда включена
+      if (ovenOnRef.current) {
+        ovenItemsRef.current.forEach(it => {
+          if (it.state !== 'burned' && it.progress < 100) processRef.current(it.id, 'bake', 2.5);
+        });
+      }
     }, 150);
     return () => clearInterval(loop);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const startHeating = () => {
-    heatingRef.current = true;
-    setIsHeating(true);
-    haptic.light();
-    playSound('sizzle');
-  };
-  const stopHeating = () => {
-    heatingRef.current = false;
-    setIsHeating(false);
-  };
 
   // ── Помешивание (кастрюля и миксер): круговые движения пальцем ──
   const stirRef = useRef<Map<string, { lastAngle: number; accum: number }>>(new Map());
@@ -304,9 +315,6 @@ export function KitchenView({
             className="absolute top-0 text-[10px]"
           >🫧</motion.div>
         ))}
-        <div className="absolute -bottom-2 text-base pointer-events-none opacity-50 select-none">
-          {isPot ? '🫕' : '🥣'}
-        </div>
         <motion.div
           animate={{ rotate: rotation }}
           transition={{ type: 'spring', stiffness: 220, damping: 18 }}
@@ -340,8 +348,8 @@ export function KitchenView({
       <motion.div
         key={item.id}
         initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
-        className="relative flex flex-col items-center justify-center p-2 rounded-xl cursor-pointer border-2 bg-red-50 border-red-300 select-none"
-        onClick={() => onProcessItem(item.id, 'bake', 18)}
+        className="relative flex flex-col items-center justify-center p-2 rounded-xl cursor-pointer border-2 bg-black/25 border-orange-300/40 select-none"
+        onClick={() => { if (ovenOnRef.current) onProcessItem(item.id, 'bake', 18); }}
         style={{ touchAction: 'manipulation', minWidth: 52, minHeight: 52 }}
       >
         {/* Heat shimmer */}
@@ -369,7 +377,7 @@ export function KitchenView({
           <motion.div
             animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 1.5 }}
             className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow z-20"
-          >Печётся… 🔥</motion.div>
+          >{ovenOn ? 'Печётся… 🔥' : 'Включи 🔥'}</motion.div>
         )}
       </motion.div>
     );
@@ -390,12 +398,16 @@ export function KitchenView({
       {/* 2×2 Station Grid — гибкая высота: делит место с зоной сборки, не вылезая за экран */}
       <div className="grid grid-cols-2 grid-rows-2 gap-1.5 p-1.5 min-h-0 relative z-10" style={{ flex: '1.5 1 0' }}>
 
-        {/* CUTTING BOARD — светлая столешница, чтобы доска KnifeAnimation выделялась */}
-        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-amber-300 bg-amber-50 shadow-md">
+        {/* CUTTING BOARD — деревянная столешница */}
+        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-amber-700/50 shadow-md"
+          style={{ background: 'linear-gradient(180deg, #f6dcab 0%, #e9c184 100%)' }}>
           <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 z-10 shrink-0">
             <span className="text-sm">🔪</span>
-            <span className="text-[9px] font-black text-amber-800 uppercase tracking-wide">Разделочная</span>
+            <span className="text-[9px] font-black text-amber-900 uppercase tracking-wide">Разделочная</span>
           </div>
+          {/* плиточный фартук сзади */}
+          <div className="absolute top-0 left-0 right-0 h-1/3 opacity-25 pointer-events-none"
+            style={{ backgroundImage: 'linear-gradient(#fff7 1px,transparent 1px),linear-gradient(90deg,#fff7 1px,transparent 1px)', backgroundSize: '16px 16px' }} />
           <div className="flex-1 flex items-center justify-center gap-1.5 flex-wrap px-1 z-10 overflow-hidden">
             <AnimatePresence>
               {boardItems.map(item => (
@@ -416,95 +428,154 @@ export function KitchenView({
               ))}
             </AnimatePresence>
             {boardItems.length === 0 && (
-              <div className="text-amber-800/40 text-[9px] font-bold text-center px-1">Овощи</div>
+              <div className="text-amber-900/40 text-[9px] font-bold text-center px-1">Овощи</div>
             )}
           </div>
         </div>
 
-        {/* STOVE — зажми и держи, чтобы греть; сними вовремя, иначе сгорит */}
-        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-orange-400 bg-orange-50 shadow-md select-none"
-          onPointerDown={startHeating}
-          onPointerUp={stopHeating}
-          onPointerLeave={stopHeating}
-          onPointerCancel={stopHeating}
-          style={{ touchAction: 'none' }}
-        >
-          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0 z-10">
-            <Flame className={cn("w-3.5 h-3.5", isHeating ? 'text-rose-500' : 'text-orange-400')} />
-            <span className="text-[9px] font-black text-orange-700 uppercase tracking-wide">Плита</span>
-            {/* Шкала нагрева */}
-            <div className="ml-auto w-12 h-2 rounded-full bg-orange-100 overflow-hidden border border-orange-200">
-              <motion.div
-                className={cn("h-full rounded-full", stoveTemp >= 80 ? 'bg-rose-500' : stoveTemp >= 35 ? 'bg-orange-500' : 'bg-emerald-400')}
-                animate={{ width: `${stoveTemp}%` }} transition={{ duration: 0.15 }}
-              />
+        {/* STOVE — металлическая плита: включи конфорку ручкой, сними вовремя */}
+        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-slate-600 shadow-md select-none"
+          style={{ background: 'linear-gradient(180deg,#64748b 0%,#475569 55%,#1e293b 100%)' }}>
+          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0 z-20">
+            <Flame className={cn("w-3.5 h-3.5", isHeating ? 'text-rose-400' : 'text-slate-400')} />
+            <span className="text-[9px] font-black text-slate-50 uppercase tracking-wide">Плита</span>
+            <div className="ml-auto flex items-center gap-1.5">
+              <div className="w-9 h-2 rounded-full bg-black/40 overflow-hidden border border-white/10">
+                <motion.div
+                  className={cn("h-full rounded-full", stoveTemp >= 80 ? 'bg-rose-500' : stoveTemp >= 35 ? 'bg-orange-500' : 'bg-emerald-400')}
+                  animate={{ width: `${stoveTemp}%` }} transition={{ duration: 0.15 }}
+                />
+              </div>
+              <Knob on={isHeating} onToggle={toggleHeat} tone="orange" />
             </div>
           </div>
-          <div className="flex-1 flex items-center justify-center gap-1 flex-wrap px-1 z-10 overflow-hidden">
-            <AnimatePresence>
-              {fryItems.map(item => renderFryItem(item))}
-            </AnimatePresence>
+          <div className="flex-1 relative flex items-center justify-center gap-1 flex-wrap px-1 overflow-hidden">
+            {/* конфорка */}
+            <div className="absolute left-1/2 bottom-1 -translate-x-1/2 rounded-full pointer-events-none z-0"
+              style={{ width: 60, height: 60, background: 'radial-gradient(circle at 50% 45%, #334155 0%, #1e293b 52%, #0f172a 56%, #64748b 60%, #1e293b 66%)' }} />
+            <Flames active={isHeating} />
+            <div className="relative z-10 flex items-center justify-center gap-1 flex-wrap">
+              <AnimatePresence>
+                {fryItems.map(item => renderFryItem(item))}
+              </AnimatePresence>
+            </div>
             {fryItems.length === 0 && (
-              <div className="text-orange-300 text-[9px] font-bold text-center px-1">Мясо · зажми 🔥</div>
+              <div className="text-slate-300/70 text-[9px] font-bold text-center px-1 z-10">Мясо · крути ручку 🔥</div>
             )}
           </div>
         </div>
 
-        {/* POT — мешай пальцем по кругу */}
-        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-cyan-400 bg-cyan-50 shadow-md">
-          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0 z-10">
-            <span className="text-sm">🫕</span>
-            <span className="text-[9px] font-black text-cyan-700 uppercase tracking-wide">Кастрюля</span>
+        {/* POT — стальная кастрюля, мешай пальцем по кругу */}
+        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-cyan-400 shadow-md"
+          style={{ background: 'linear-gradient(180deg,#e0f2fe,#bae6fd)' }}>
+          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0 z-20">
+            <span className="text-sm">🍲</span>
+            <span className="text-[9px] font-black text-cyan-800 uppercase tracking-wide">Кастрюля</span>
+            <span className="ml-auto text-[7px] font-black text-cyan-600">мешай 🌀</span>
           </div>
           <div
-            className="flex-1 flex items-center justify-center gap-1 flex-wrap px-1 z-10 overflow-hidden"
+            className="flex-1 relative flex items-center justify-center px-1 overflow-hidden"
             style={{ touchAction: 'none' }}
             {...makeStirHandlers('pot', potItems, 'boil')}
           >
-            <AnimatePresence>
-              {potItems.map(item => renderStirItem(item, 'pot'))}
-            </AnimatePresence>
+            {/* тело кастрюли */}
+            <div className="absolute left-1/2 bottom-0 -translate-x-1/2 z-0 pointer-events-none"
+              style={{ width: '80%', height: '74%', borderRadius: '12px 12px 22px 22px', background: 'linear-gradient(180deg,#f1f5f9 0%,#cbd5e1 55%,#94a3b8 100%)', boxShadow: 'inset 0 6px 6px rgba(255,255,255,0.6), inset 0 -8px 10px rgba(0,0,0,0.25)' }} />
+            {/* ручки */}
+            <div className="absolute z-0 pointer-events-none" style={{ left: '3%', top: '46%', width: 13, height: 7, borderRadius: 6, background: '#64748b' }} />
+            <div className="absolute z-0 pointer-events-none" style={{ right: '3%', top: '46%', width: 13, height: 7, borderRadius: 6, background: '#64748b' }} />
+            {/* ободок */}
+            <div className="absolute left-1/2 -translate-x-1/2 z-0 pointer-events-none" style={{ width: '88%', height: 7, top: '24%', borderRadius: 8, background: 'linear-gradient(180deg,#e2e8f0,#94a3b8)' }} />
+            <div className="relative z-10 flex items-center justify-center gap-1 flex-wrap">
+              <AnimatePresence>
+                {potItems.map(item => renderStirItem(item, 'pot'))}
+              </AnimatePresence>
+            </div>
             {potItems.length === 0 && (
-              <div className="text-cyan-300 text-[9px] font-bold text-center px-1">Суп / Каша</div>
+              <div className="text-cyan-700/50 text-[9px] font-bold text-center px-1 z-10">Суп / Каша</div>
             )}
           </div>
         </div>
 
-        {/* MIXER — круговые движения пальцем */}
-        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-blue-300 bg-blue-50 shadow-md">
-          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0 z-10">
-            <span className="text-sm">🌀</span>
-            <span className="text-[9px] font-black text-blue-700 uppercase tracking-wide">Миксер</span>
+        {/* MIXER — чаша с венчиком, круговые движения пальцем */}
+        <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-violet-300 shadow-md"
+          style={{ background: 'linear-gradient(180deg,#ede9fe,#ddd6fe)' }}>
+          <div className="flex items-center gap-1 px-2 pt-1 pb-0.5 shrink-0 z-20">
+            <span className="text-sm">🥣</span>
+            <span className="text-[9px] font-black text-violet-800 uppercase tracking-wide">Миксер</span>
+            <span className="ml-auto text-[7px] font-black text-violet-600">мешай 🌀</span>
           </div>
           <div
-            className="flex-1 flex items-center justify-center gap-1 flex-wrap px-1 z-10 overflow-hidden"
+            className="flex-1 relative flex items-center justify-center px-1 overflow-hidden"
             style={{ touchAction: 'none' }}
             {...makeStirHandlers('mixer', mixerItems, 'mix')}
           >
-            <AnimatePresence>
-              {mixerItems.map(item => renderStirItem(item, 'mixer'))}
-            </AnimatePresence>
+            {/* чаша */}
+            <div className="absolute left-1/2 bottom-0 -translate-x-1/2 z-0 pointer-events-none"
+              style={{ width: '76%', height: '72%', borderRadius: '12px 12px 50% 50%', background: 'linear-gradient(180deg,#f8fafc,#cbd5e1 60%,#94a3b8)', boxShadow: 'inset 0 6px 8px rgba(255,255,255,0.7), inset 0 -6px 8px rgba(0,0,0,0.2)' }} />
+            {/* венчик — вращается при помешивании */}
+            <motion.div className="absolute left-1/2 top-0.5 -translate-x-1/2 z-20 pointer-events-none text-xl"
+              animate={{ rotate: (stirTick['mixer'] ?? 0) * 60 }}
+              transition={{ type: 'spring', stiffness: 200, damping: 15 }}>🥄</motion.div>
+            <div className="relative z-10 flex items-center justify-center gap-1 flex-wrap">
+              <AnimatePresence>
+                {mixerItems.map(item => renderStirItem(item, 'mixer'))}
+              </AnimatePresence>
+            </div>
             {mixerItems.length === 0 && (
-              <div className="text-blue-300 text-[9px] font-bold text-center px-1">Крем / Соус</div>
+              <div className="text-violet-700/50 text-[9px] font-bold text-center px-1 z-10">Крем / Соус</div>
             )}
           </div>
         </div>
       </div>
 
-      {/* OVEN — печётся сама, занимает узкую полосу */}
-      <div className="relative z-10 mx-1.5 mb-1 rounded-2xl overflow-hidden flex items-center border-4 border-red-400 shadow-md shrink-0"
-        style={{ background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', height: 52 }}>
-        <div className="flex items-center gap-1 px-2 shrink-0 z-10">
-          <span className="text-sm">🌡️</span>
-          <span className="text-[9px] font-black text-red-700 uppercase tracking-wide leading-tight">Духовка<br/>180°</span>
+      {/* OVEN — настоящая духовка: кнопка ВКЛ/ВЫКЛ, дверца открывается с анимацией */}
+      <div className="relative z-10 mx-1.5 mb-1 rounded-2xl overflow-hidden flex items-stretch border-4 border-slate-500 shadow-md shrink-0"
+        style={{ background: 'linear-gradient(180deg,#64748b,#334155)', height: 74 }}>
+        {/* Панель управления */}
+        <div className="flex flex-col items-center justify-center gap-0.5 px-3 shrink-0 z-20 border-r-2 border-slate-600/70">
+          <span className="text-[9px] font-black text-slate-50 uppercase tracking-wide leading-none">Духовка</span>
+          <motion.span className="text-[9px] font-black leading-none"
+            animate={{ color: ovenOn ? '#fdba74' : '#64748b' }}>
+            {ovenOn ? '180°C' : 'выкл'}
+          </motion.span>
+          <div className="mt-1.5"><Knob on={ovenOn} onToggle={toggleOven} tone="red" /></div>
         </div>
-        <div className="flex-1 flex items-center justify-center gap-2 flex-wrap px-1 z-10 overflow-hidden py-1">
-          <AnimatePresence>
-            {ovenItems.map(item => renderOvenItem(item))}
-          </AnimatePresence>
-          {ovenItems.length === 0 && (
-            <div className="text-red-300 text-[9px] font-bold text-center px-1">Выпечка</div>
-          )}
+
+        {/* Камера с дверцей */}
+        <div className="flex-1 relative overflow-hidden" style={{ perspective: 500 }}>
+          {/* Внутренняя камера */}
+          <div className="absolute inset-1 rounded-lg overflow-hidden"
+            style={{ background: ovenOn ? 'linear-gradient(180deg,#9a3412,#c2410c)' : 'linear-gradient(180deg,#1f2937,#111827)' }}>
+            {/* решётка */}
+            <div className="absolute left-2 right-2 z-0" style={{ top: '38%', height: 2, background: 'rgba(148,163,184,0.5)' }} />
+            <div className="absolute left-2 right-2 z-0" style={{ top: '66%', height: 2, background: 'rgba(148,163,184,0.5)' }} />
+            {/* жар */}
+            {ovenOn && (
+              <motion.div className="absolute inset-0 bg-orange-500/30 pointer-events-none"
+                animate={{ opacity: [0.2, 0.55, 0.2] }} transition={{ repeat: Infinity, duration: 1.3 }} />
+            )}
+            <div className="absolute inset-0 flex items-center justify-center gap-2 flex-wrap px-1 py-1 z-10">
+              <AnimatePresence>
+                {ovenItems.map(item => renderOvenItem(item))}
+              </AnimatePresence>
+              {ovenItems.length === 0 && (
+                <div className={cn("text-[9px] font-bold text-center px-1", ovenOn ? 'text-orange-100/80' : 'text-slate-400')}>
+                  {ovenOn ? 'Ставь выпечку' : 'Выпечка · включи 🔥'}
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Стеклянная дверца — откидывается вниз при включении */}
+          <motion.div className="absolute inset-0 z-30 origin-bottom pointer-events-none"
+            style={{ transformStyle: 'preserve-3d', background: 'linear-gradient(180deg,#475569,#1e293b)', borderRadius: 8, border: '2px solid #334155' }}
+            animate={{ rotateX: ovenOn ? 84 : 0, opacity: ovenOn ? 0.12 : 1 }}
+            transition={{ type: 'spring', stiffness: 110, damping: 15 }}>
+            {/* стекло */}
+            <div className="absolute inset-2 rounded" style={{ background: 'linear-gradient(135deg, rgba(148,163,184,0.45), rgba(30,41,59,0.6))', border: '1px solid #64748b' }} />
+            {/* ручка */}
+            <div className="absolute left-1/2 -translate-x-1/2 rounded-full" style={{ top: 4, width: '55%', height: 5, background: 'linear-gradient(180deg,#e2e8f0,#94a3b8)' }} />
+          </motion.div>
         </div>
       </div>
 
