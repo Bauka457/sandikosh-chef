@@ -30,6 +30,56 @@ export function KitchenView({
 }: Props) {
   const dish = finishedDish ? RECIPES[finishedDish] : null;
 
+  // ── Drag-and-drop сборка: тащим готовый ингредиент на тарелку ──
+  const dropRef = useRef<HTMLDivElement>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const dragInfoRef = useRef<{ over: boolean; moved: boolean } | null>(null);
+  const [drag, setDrag] = useState<{ item: PrepItem; x: number; y: number; over: boolean; moved: boolean } | null>(null);
+
+  // Статус ингредиента относительно собираемого блюда:
+  // 'next' — класть сейчас (зелёный), 'later' — нужен позже (жёлтый),
+  // 'wrong' — не из этого блюда (красный), 'ok' — рецепта нет (нейтрально)
+  const ingredientStatus = (ingredientId: IngredientType): 'next' | 'later' | 'wrong' | 'ok' => {
+    if (!activeRecipe) return 'ok';
+    const expected = activeRecipe.steps[plate.length]?.ingredient;
+    if (ingredientId === expected) return 'next';
+    if (activeRecipe.steps.slice(plate.length).some(s => s.ingredient === ingredientId)) return 'later';
+    return 'wrong';
+  };
+  const dragWillAccept = drag ? ingredientStatus(drag.item.ingredientId) === 'next' : false;
+
+  const makeDragHandlers = (item: PrepItem) => ({
+    onPointerDown: (e: ReactPointerEvent<HTMLDivElement>) => {
+      (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      dragInfoRef.current = { over: false, moved: false };
+      setDrag({ item, x: e.clientX, y: e.clientY, over: false, moved: false });
+    },
+    onPointerMove: (e: ReactPointerEvent<HTMLDivElement>) => {
+      const start = dragStartRef.current;
+      if (!start) return;
+      const moved = Math.abs(e.clientX - start.x) > 6 || Math.abs(e.clientY - start.y) > 6;
+      const zone = dropRef.current?.getBoundingClientRect();
+      const over = !!zone && e.clientX >= zone.left && e.clientX <= zone.right
+        && e.clientY >= zone.top && e.clientY <= zone.bottom;
+      dragInfoRef.current = { over, moved };
+      setDrag({ item, x: e.clientX, y: e.clientY, over, moved });
+    },
+    onPointerUp: () => {
+      const info = dragInfoRef.current;
+      dragStartRef.current = null;
+      dragInfoRef.current = null;
+      setDrag(null);
+      // Тап (без движения) или отпустили над тарелкой → пробуем положить
+      if (!info || !info.moved || info.over) onAssembleItem(item);
+    },
+    onPointerCancel: () => {
+      dragStartRef.current = null;
+      dragInfoRef.current = null;
+      setDrag(null);
+    },
+  });
+
   // Track items that just became ready for pop animation
   const [justReadyIds, setJustReadyIds] = useState<Set<string>>(new Set());
   const prevPrepRef = useRef<PrepItem[]>([]);
@@ -518,10 +568,12 @@ export function KitchenView({
         {/* Ready items column */}
         <div className="w-16 border-r-2 border-amber-100 flex flex-col items-center gap-1 py-1 overflow-y-auto shrink-0"
           style={{ WebkitOverflowScrolling: 'touch' }}>
-          <div className="text-[7px] font-black text-amber-700 uppercase tracking-wide mb-0.5">Готово</div>
+          <div className="text-[7px] font-black text-amber-700 uppercase tracking-wide mb-0.5 text-center leading-tight">Готово<br/>тащи 👉</div>
           <AnimatePresence>
             {readyItems.map(item => {
               const isJustReady = justReadyIds.has(item.id);
+              const status = ingredientStatus(item.ingredientId);
+              const isDragging = drag?.item.id === item.id && drag.moved;
               return (
                 <motion.div
                   key={item.id}
@@ -532,14 +584,24 @@ export function KitchenView({
                   exit={{ scale: 0 }}
                   transition={isJustReady ? { duration: 0.5, times: [0, 0.3, 0.55, 0.8, 1] } : { duration: 0.2 }}
                   className={cn(
-                    "relative bg-amber-50 border-2 border-amber-300 rounded-xl p-2 cursor-pointer text-3xl active:scale-90 transition-transform shadow-sm flex items-center justify-center",
+                    "relative rounded-xl p-2 cursor-grab active:cursor-grabbing text-3xl transition-transform shadow-sm flex items-center justify-center border-2",
+                    status === 'next' ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-300'
+                      : status === 'wrong' ? 'bg-rose-50 border-rose-300'
+                      : status === 'later' ? 'bg-amber-50 border-amber-300'
+                      : 'bg-amber-50 border-amber-300',
                     isJustReady && 'ring-2 ring-emerald-400 ring-offset-1'
                   )}
-                  style={{ minWidth: 44, minHeight: 44 }}
-                  onClick={() => onAssembleItem(item)}
-                  whileTap={{ scale: 0.82 }}
+                  style={{ minWidth: 44, minHeight: 44, touchAction: 'none', opacity: isDragging ? 0.3 : 1 }}
+                  {...makeDragHandlers(item)}
                 >
                   {INGREDIENTS[item.ingredientId].icon}
+                  {/* Цветовая метка статуса (угол) */}
+                  {status === 'next' && (
+                    <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 text-white text-[8px] font-black flex items-center justify-center shadow">✓</span>
+                  )}
+                  {status === 'wrong' && (
+                    <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-rose-500 text-white text-[8px] font-black flex items-center justify-center shadow">✕</span>
+                  )}
                   {isJustReady && (
                     <motion.div
                       initial={{ opacity: 1, scale: 0 }}
@@ -571,7 +633,11 @@ export function KitchenView({
 
           {/* Plate area with flash feedback */}
           <motion.div
-            className="flex-1 flex items-center justify-center relative w-full min-h-0"
+            ref={dropRef}
+            className={cn(
+              "flex-1 flex items-center justify-center relative w-full min-h-0 rounded-2xl transition-colors",
+              drag?.moved && (dragWillAccept ? 'bg-emerald-100/60' : 'bg-rose-100/60')
+            )}
             animate={
               plateFlash === 'bad'
                 ? { x: [0, -8, 8, -6, 6, 0] }
@@ -581,6 +647,20 @@ export function KitchenView({
             }
             transition={{ duration: 0.35 }}
           >
+            {/* Подсказка зоны при перетаскивании: зелёная — клади, красная — не тот */}
+            {drag?.moved && (
+              <div className={cn(
+                "absolute inset-1 rounded-2xl border-4 border-dashed pointer-events-none z-20 flex items-start justify-center pt-1",
+                dragWillAccept ? 'border-emerald-400' : 'border-rose-400'
+              )}>
+                <span className={cn(
+                  "text-[10px] font-black px-2 py-0.5 rounded-full shadow",
+                  dragWillAccept ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'
+                )}>
+                  {dragWillAccept ? '✓ Отпусти сюда' : '✕ Не тот ингредиент'}
+                </span>
+              </div>
+            )}
             {/* Flash overlay */}
             <AnimatePresence>
               {plateFlash && (
@@ -666,6 +746,16 @@ export function KitchenView({
           </button>
         </div>
       </div>
+
+      {/* Призрак ингредиента, который тащим пальцем */}
+      {drag?.moved && (
+        <div
+          className="fixed z-200 pointer-events-none -translate-x-1/2 -translate-y-1/2 text-5xl drop-shadow-2xl"
+          style={{ left: drag.x, top: drag.y }}
+        >
+          {INGREDIENTS[drag.item.ingredientId].icon}
+        </div>
+      )}
     </div>
   );
 }
