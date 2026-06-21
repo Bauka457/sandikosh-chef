@@ -10,29 +10,34 @@ interface Props {
   progress: number;
   /** Состояние из PrepItem — нужно только для серого «сырого» вида */
   state?: 'raw' | 'processing' | 'ready' | 'burned';
-  /** Вызывается на каждый тап/свайп вниз; amount — сколько прогресса добавить */
+  /** Сколько ударов ножом нужно для полной нарезки (зависит от продукта) */
+  chopsNeeded?: number;
+  /** Вызывается на каждый тап/рез; amount — сколько прогресса (0..100) добавить */
   onCut: (amount: number) => void;
   /** Вызывается один раз, когда прогресс достиг 100% */
   onComplete?: () => void;
   className?: string;
 }
 
-const MAX_LINES = 5;        // максимум линий разреза на ингредиенте
-const TAP_AMOUNT = 20;      // прогресс за тап
-const SWIPE_AMOUNT = 32;    // прогресс за свайп вниз (рубить эффективнее)
-const SWIPE_THRESHOLD = 14; // px вертикального движения = один рез
+const CHOP_DISTANCE = 26;   // px движения пальца (в любую сторону) = один рез
 
 /**
  * Разделочная доска в стиле Cooking Fever: тёплое дерево с волокнами и тенью,
  * крупный ингредиент по центру, стальной нож-SVG с бликом и заклёпками,
  * который рубит вниз-вверх на тап/свайп. Вся сцена — один масштабируемый SVG.
  */
-export function KnifeAnimation({ icon, progress, state, onCut, onComplete, className }: Props) {
+export function KnifeAnimation({ icon, progress, state, chopsNeeded = 6, onCut, onComplete, className }: Props) {
   const knife = useAnimationControls();
   const food = useAnimationControls();
-  const startY = useRef<number | null>(null);
-  const swiped = useRef(false);
+  // последняя точка пальца + накопленная дистанция «пилящего» движения
+  const lastPt = useRef<{ x: number; y: number } | null>(null);
+  const travel = useRef(0);
+  const sawed = useRef(false);
   const completed = useRef(false);
+  const swingDir = useRef(1);
+
+  // один рез добавляет ровно долю от 100% — итого нужно chopsNeeded резов
+  const perChop = 100 / chopsNeeded;
 
   // onComplete ровно один раз при достижении 100%
   useEffect(() => {
@@ -43,37 +48,47 @@ export function KnifeAnimation({ icon, progress, state, onCut, onComplete, class
     if (progress < 100) completed.current = false;
   }, [progress, onComplete]);
 
-  const chop = (amount: number) => {
+  const chop = () => {
     if (progress >= 100) return;
-    // нож рубит вниз к ингредиенту и возвращается (остаётся в кадре)
-    knife.start({ y: [0, 17, 0] }, { duration: 0.22, times: [0, 0.5, 1], ease: 'easeOut' });
+    // нож рубит к ингредиенту и возвращается, чуть качаясь из стороны в сторону
+    swingDir.current *= -1;
+    knife.start(
+      { y: [0, 17, 0], rotate: [0, swingDir.current * 4, 0] },
+      { duration: 0.2, times: [0, 0.5, 1], ease: 'easeOut' },
+    );
     // ингредиент вздрагивает под лезвием
-    food.start({ scaleY: [1, 0.86, 1], x: [0, -1.5, 1.5, 0] }, { duration: 0.22 });
+    food.start({ scaleY: [1, 0.86, 1], x: [0, -1.5, 1.5, 0] }, { duration: 0.2 });
     haptic.light();
     playSound('chop');
-    onCut(amount);
+    onCut(perChop);
   };
 
   const handlePointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    startY.current = e.clientY;
-    swiped.current = false;
+    lastPt.current = { x: e.clientX, y: e.clientY };
+    travel.current = 0;
+    sawed.current = false;
     e.currentTarget.setPointerCapture(e.pointerId);
   };
   const handlePointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (startY.current === null || e.buttons !== 1) return;
-    const dy = e.clientY - startY.current;
-    if (dy > SWIPE_THRESHOLD) {        // свайп вниз = рез
-      chop(SWIPE_AMOUNT);
-      startY.current = e.clientY;       // позволяем серию резов одним движением
-      swiped.current = true;
+    if (lastPt.current === null || e.buttons !== 1) return;
+    // копим длину движения пальца в ЛЮБУЮ сторону (пилящие движения туда-сюда)
+    const dx = e.clientX - lastPt.current.x;
+    const dy = e.clientY - lastPt.current.y;
+    travel.current += Math.hypot(dx, dy);
+    lastPt.current = { x: e.clientX, y: e.clientY };
+    while (travel.current >= CHOP_DISTANCE) {  // каждый отрезок пути = один рез
+      travel.current -= CHOP_DISTANCE;
+      sawed.current = true;
+      chop();
     }
   };
   const handlePointerUp = () => {
-    if (!swiped.current) chop(TAP_AMOUNT); // не было свайпа → засчитываем тап
-    startY.current = null;
+    if (!sawed.current) chop();  // короткий тап без движения → один рез
+    lastPt.current = null;
+    travel.current = 0;
   };
 
-  const cuts = Math.min(MAX_LINES, Math.floor((progress / 100) * MAX_LINES));
+  const cuts = Math.min(chopsNeeded, Math.round((progress / 100) * chopsNeeded));
   const isRaw = state ? state === 'raw' : progress === 0;
 
   return (
@@ -89,7 +104,7 @@ export function KnifeAnimation({ icon, progress, state, onCut, onComplete, class
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerCancel={() => { startY.current = null; }}
+      onPointerCancel={() => { lastPt.current = null; travel.current = 0; }}
     >
       <svg
         viewBox="0 0 140 100"
@@ -158,10 +173,13 @@ export function KnifeAnimation({ icon, progress, state, onCut, onComplete, class
           >
             {icon}
           </text>
-          <g filter="url(#kniCutShadow)" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" opacity="0.92">
-            {Array.from({ length: cuts }).map((_, i) => (
-              <line key={i} x1="54" y1="49" x2="86" y2="49" transform={`rotate(${-34 + i * 16} 70 49)`} />
-            ))}
+          <g filter="url(#kniCutShadow)" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" opacity="0.92">
+            {Array.from({ length: cuts }).map((_, i) => {
+              // равномерно распределяем линии разреза по веер от центра
+              const spread = 70;
+              const angle = cuts > 1 ? -spread / 2 + (spread / (cuts - 1)) * i : 0;
+              return <line key={i} x1="54" y1="49" x2="86" y2="49" transform={`rotate(${angle} 70 49)`} />;
+            })}
           </g>
         </motion.g>
 
@@ -209,7 +227,7 @@ export function KnifeAnimation({ icon, progress, state, onCut, onComplete, class
           transition={{ repeat: Infinity, duration: 1 }}
           className="pointer-events-none absolute left-1/2 top-0 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-amber-700 px-1.5 py-0.5 text-[8px] font-black text-white shadow"
         >
-          🔪 Режь!
+          🔪 Пили ножом!
         </motion.div>
       )}
     </div>

@@ -8,6 +8,13 @@ import { playSound } from '../sound';
 import { KnifeAnimation } from './KnifeAnimation';
 import { Knob, Flames } from './StationDecor';
 
+// Сколько резов нужно для продукта: больше processRequired — больше движений ножом.
+// Держим в диапазоне 4–8, чтобы резать всегда несколько раз, а не один свайп.
+const chopsForItem = (id: IngredientType) => {
+  const req = INGREDIENTS[id]?.processRequired ?? 30;
+  return Math.max(4, Math.min(8, Math.round(req / 7)));
+};
+
 interface Props {
   plate: IngredientType[];
   prepItems: PrepItem[];
@@ -117,11 +124,26 @@ export function KitchenView({
       playSound('ding');
       setTimeout(() => setJustReadyIds(new Set()), 700);
     }
+    // чистим счётчик переворотов для кусков, которых уже нет на сковороде
+    setFlips(prev => {
+      const live = new Set(prepItems.map(p => p.id));
+      let changed = false;
+      const next: Record<string, number> = {};
+      for (const k in prev) { if (live.has(k)) next[k] = prev[k]; else changed = true; }
+      return changed ? next : prev;
+    });
     prevPrepRef.current = prepItems;
   }, [prepItems]);
 
   // ── Сковорода: температура (греется при включённой конфорке, остывает сама) ──
   const [stoveTemp, setStoveTemp] = useState(0);
+  // Сколько раз перевернули каждый кусок на сковороде (для реалистичной прожарки)
+  const [flips, setFlips] = useState<Record<string, number>>({});
+  const flipItem = (id: string) => {
+    haptic.medium();
+    playSound('sizzle');
+    setFlips(prev => ({ ...prev, [id]: (prev[id] ?? 0) + 1 }));
+  };
   const stoveTempRef = useRef(0);
   const heatingRef = useRef(false);
   const [isHeating, setIsHeating] = useState(false);
@@ -232,12 +254,15 @@ export function KitchenView({
   fryItemsRef.current = fryItems;
   ovenItemsRef.current = ovenItems;
 
-  // ── СКОВОРОДА: жарится сама на горячей сковороде; готовое снимай тапом ──
+  // ── СКОВОРОДА: жарится сама на горячей сковороде; переворачивай и снимай вовремя ──
   const renderFryItem = (item: PrepItem) => {
     const isBurned = item.state === 'burned';
     const isDone = !isBurned && item.progress >= 100;
     const isCooking = item.state === 'processing' && !isDone && stoveTemp >= 35;
     const isBurning = isDone && stoveTemp >= 35; // готово, но всё ещё на огне — скоро сгорит
+    const flipCount = flips[item.id] ?? 0;
+    // на середине прожарки нужно перевернуть кусок (как на настоящей сковороде)
+    const needsFlip = isCooking && flipCount === 0 && item.progress >= 45;
 
     return (
       <motion.div
@@ -253,6 +278,7 @@ export function KitchenView({
         onClick={() => {
           if (isBurned) { haptic.medium(); onDiscardItem(item.id); }
           else if (isDone) { haptic.success(); onStoveRelease(item.id); }
+          else if (isCooking) { flipItem(item.id); } // тап по жарящемуся — переворот
         }}
         style={{ touchAction: 'manipulation', minWidth: 52, minHeight: 52 }}
       >
@@ -268,17 +294,25 @@ export function KitchenView({
 
         <div className="absolute -bottom-2 text-base pointer-events-none opacity-50 select-none">🍳</div>
 
+        {/* Переворот: кусок делает сальто по оси Y на каждый тап */}
+        <motion.div
+          animate={{ rotateY: flipCount * 180 }}
+          transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+          style={{ transformStyle: 'preserve-3d' }}
+          className="z-10"
+        >
         <motion.div
           animate={isCooking ? { y: [0, -2, 0], rotate: [-2, 2, -2] } : isDone && !isBurned ? { scale: [1, 1.08, 1] } : {}}
           transition={{ repeat: Infinity, duration: isCooking ? 0.5 : 0.8 }}
           className={cn(
-            "text-3xl select-none z-10",
+            "text-3xl select-none",
             isBurned ? 'grayscale brightness-50 contrast-125'
               : item.state === 'raw' ? 'grayscale brightness-75'
               : isCooking ? 'drop-shadow-[0_0_6px_rgba(251,146,60,0.8)]' : ''
           )}
         >
           {INGREDIENTS[item.ingredientId].icon}
+        </motion.div>
         </motion.div>
 
         {!isBurned && !isDone && item.progress > 0 && (
@@ -292,6 +326,12 @@ export function KitchenView({
             animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 1.2 }}
             className="absolute -top-3 left-1/2 -translate-x-1/2 bg-orange-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow z-20"
           >Грей! 🔥</motion.div>
+        )}
+        {needsFlip && (
+          <motion.div
+            animate={{ scale: [1, 1.12, 1], rotate: [0, -8, 8, 0] }} transition={{ repeat: Infinity, duration: 0.7 }}
+            className="absolute -top-3 left-1/2 -translate-x-1/2 bg-amber-500 text-white text-[8px] px-1.5 py-0.5 rounded-full font-black whitespace-nowrap shadow z-20"
+          >🔄 Переверни!</motion.div>
         )}
         {isDone && !isBurning && (
           <motion.div
@@ -416,7 +456,7 @@ export function KitchenView({
       }} />
 
       {/* 2×2 Station Grid — гибкая высота: делит место с зоной сборки, не вылезая за экран */}
-      <div className="grid grid-cols-2 grid-rows-2 gap-1.5 p-1.5 min-h-0 relative z-10" style={{ flex: '1.5 1 0' }}>
+      <div className="grid grid-cols-2 grid-rows-2 gap-1.5 p-1.5 min-h-0 relative z-10" style={{ flex: '1.9 1 0' }}>
 
         {/* CUTTING BOARD — деревянная столешница */}
         <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-amber-700/50 shadow-md"
@@ -428,7 +468,7 @@ export function KitchenView({
           {/* плиточный фартук сзади */}
           <div className="absolute top-0 left-0 right-0 h-1/3 opacity-25 pointer-events-none"
             style={{ backgroundImage: 'linear-gradient(#fff7 1px,transparent 1px),linear-gradient(90deg,#fff7 1px,transparent 1px)', backgroundSize: '16px 16px' }} />
-          <div className="flex-1 flex items-center justify-center gap-1.5 flex-wrap px-1 z-10 overflow-hidden">
+          <div className="flex-1 flex items-center justify-center gap-1.5 flex-wrap px-1 py-1 z-10 overflow-visible">
             <AnimatePresence>
               {boardItems.map(item => (
                 <motion.div
@@ -442,6 +482,7 @@ export function KitchenView({
                     icon={INGREDIENTS[item.ingredientId].icon}
                     progress={item.progress}
                     state={item.state}
+                    chopsNeeded={chopsForItem(item.ingredientId)}
                     onCut={(amount) => onProcessItem(item.id, 'cut', amount)}
                   />
                 </motion.div>
@@ -469,7 +510,7 @@ export function KitchenView({
               <Knob on={isHeating} onToggle={toggleHeat} tone="orange" />
             </div>
           </div>
-          <div className="flex-1 relative flex items-center justify-center gap-1 flex-wrap px-1 overflow-hidden">
+          <div className="flex-1 relative flex items-center justify-center gap-1 flex-wrap px-1 pt-2.5 pb-2 overflow-visible">
             {/* конфорка */}
             <div className="absolute left-1/2 bottom-1 -translate-x-1/2 rounded-full pointer-events-none z-0"
               style={{ width: 60, height: 60, background: 'radial-gradient(circle at 50% 45%, #334155 0%, #1e293b 52%, #0f172a 56%, #64748b 60%, #1e293b 66%)' }} />
@@ -480,7 +521,7 @@ export function KitchenView({
               </AnimatePresence>
             </div>
             {fryItems.length === 0 && (
-              <div className="text-slate-300/70 text-[9px] font-bold text-center px-1 z-10">Мясо · крути ручку 🔥</div>
+              <div className="text-slate-300/70 text-[9px] font-bold text-center px-1 z-10">Мясо · грей 🔥 · переворачивай 🔄</div>
             )}
           </div>
         </div>
@@ -494,7 +535,7 @@ export function KitchenView({
             <span className="ml-auto text-[7px] font-black text-cyan-600">мешай 🌀</span>
           </div>
           <div
-            className="flex-1 relative flex items-center justify-center px-1 overflow-hidden"
+            className="flex-1 relative flex items-center justify-center px-1 pt-2.5 pb-2 overflow-visible"
             style={{ touchAction: 'none' }}
             {...makeStirHandlers('pot', potItems, 'boil')}
           >
@@ -526,7 +567,7 @@ export function KitchenView({
             <span className="ml-auto text-[7px] font-black text-violet-600">мешай 🌀</span>
           </div>
           <div
-            className="flex-1 relative flex items-center justify-center px-1 overflow-hidden"
+            className="flex-1 relative flex items-center justify-center px-1 pt-2.5 pb-2 overflow-visible"
             style={{ touchAction: 'none' }}
             {...makeStirHandlers('mixer', mixerItems, 'mix')}
           >

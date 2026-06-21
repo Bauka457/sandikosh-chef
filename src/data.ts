@@ -57,6 +57,43 @@ export const INGREDIENTS: Record<string, Ingredient> = {
   chocolate: { id: 'chocolate', name: 'Шоколад', icon: '🍫', maxStock: 4, process: 'none', grams: 50 },
 };
 
+// ── СКЛАД: продукты разложены по шкафам/холодильникам как на настоящей кухне ──
+// Каждый «шкаф» (cabinet) — отдельный визуальный блок со своими полками и оформлением.
+export interface StorageCabinet {
+  id: string;
+  name: string;
+  emoji: string;        // иконка-вывеска шкафа
+  kind: 'fridge' | 'freezer' | 'crate' | 'pantry' | 'bakery' | 'sweets';
+  items: string[];      // id ингредиентов на полках этого шкафа
+}
+
+export const STORAGE_CABINETS: StorageCabinet[] = [
+  {
+    id: 'fridge', name: 'Холодильник', emoji: '🧊', kind: 'fridge',
+    items: ['patty', 'chicken', 'fish', 'bacon', 'sausage', 'pork_ribs', 'cheese', 'egg', 'butter', 'milk'],
+  },
+  {
+    id: 'freezer', name: 'Морозилка', emoji: '❄️', kind: 'freezer',
+    items: ['shrimp', 'broccoli', 'peas', 'berry'],
+  },
+  {
+    id: 'crate', name: 'Овощной ящик', emoji: '🥬', kind: 'crate',
+    items: ['lettuce', 'tomato', 'onion', 'potato', 'carrot', 'cucumber', 'mushroom', 'garlic', 'bell_pepper', 'avocado', 'apple', 'lemon', 'herbs'],
+  },
+  {
+    id: 'pantry', name: 'Кладовая', emoji: '🗄️', kind: 'pantry',
+    items: ['flour', 'sugar', 'rice', 'pasta', 'water', 'soy_sauce', 'mayo', 'coffee', 'cinnamon'],
+  },
+  {
+    id: 'bakery', name: 'Хлебница', emoji: '🍞', kind: 'bakery',
+    items: ['bun_bottom', 'bun_top', 'bread', 'toast', 'cake_base'],
+  },
+  {
+    id: 'sweets', name: 'Сладкая полка', emoji: '🍫', kind: 'sweets',
+    items: ['cream', 'chocolate'],
+  },
+];
+
 export const RECIPES: Record<string, Recipe> = {
   // =========================================
   // БУРГЕРЫ & СЭНДВИЧИ
