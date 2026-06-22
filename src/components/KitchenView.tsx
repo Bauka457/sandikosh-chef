@@ -38,6 +38,16 @@ export function KitchenView({
 }: Props) {
   const dish = finishedDish ? RECIPES[finishedDish] : null;
 
+  // ── Этапы кухни: сперва «Готовим» (станции), затем «Собираем» (тарелка) ──
+  const [stage, setStage] = useState<'cook' | 'assemble'>('cook');
+
+  // Когда всё подано/очищено — сами возвращаемся к готовке для следующего блюда
+  useEffect(() => {
+    if (stage === 'assemble' && prepItems.length === 0 && plate.length === 0 && !finishedDish) {
+      setStage('cook');
+    }
+  }, [stage, prepItems.length, plate.length, finishedDish]);
+
   // ── Drag-and-drop сборка: тащим готовый ингредиент на тарелку ──
   const dropRef = useRef<HTMLDivElement>(null);
   const dragStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -455,12 +465,18 @@ export function KitchenView({
         backgroundSize: '34px 34px',
       }} />
 
+      <AnimatePresence mode="wait" initial={false}>
+      {stage === 'cook' ? (
+      <motion.div key="cook" className="relative z-10 flex-1 flex flex-col min-h-0"
+        initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
+        transition={{ duration: 0.22 }}>
+
       {/* Прокручиваемая зона техники: станции получают полноценную высоту и
           НИЧЕГО не обрезается — если не помещается на экран, просто прокручиваем. */}
       <div className="relative z-10 flex-1 min-h-0 overflow-y-auto">
-      {/* 2×2 Station Grid — фиксированная комфортная высота, чтобы продукты и
-          подсказки всегда влезали целиком */}
-      <div className="grid grid-cols-2 grid-rows-2 gap-2 p-2 relative z-10 shrink-0" style={{ minHeight: 320 }}>
+      {/* 2×2 Station Grid — заполняет экран целиком (сборка вынесена отдельно),
+          поэтому продукты и подсказки всегда влезают */}
+      <div className="grid grid-cols-2 grid-rows-2 gap-2 p-2 relative z-10 flex-1" style={{ minHeight: 300 }}>
 
         {/* CUTTING BOARD — деревянная столешница */}
         <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-amber-700/50 shadow-md"
@@ -698,9 +714,42 @@ export function KitchenView({
         </div>
       )}
 
+      {/* Переход к сборке: когда наготовил — жми, кухня «переедет» к столу сборки */}
+      <div className="relative z-10 shrink-0 px-2 py-1.5 bg-orange-50 border-t-2 border-orange-200">
+        <motion.button
+          onClick={() => { haptic.medium(); setStage('assemble'); }}
+          animate={readyItems.length > 0 ? { scale: [1, 1.03, 1] } : {}}
+          transition={{ repeat: Infinity, duration: 1.2 }}
+          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl font-black text-white text-sm shadow-md border-b-4 active:translate-y-0.5 active:border-b-0 bg-emerald-500 border-emerald-700"
+        >
+          🍽️ К сборке блюда
+          <span className="bg-white/25 rounded-full px-2 py-0.5 text-xs">Готово: {readyItems.length}</span>
+          <span className="text-lg">→</span>
+        </motion.button>
+      </div>
+
+      </motion.div>
+      ) : (
+      <motion.div key="assemble" className="relative z-10 flex-1 flex flex-col min-h-0"
+        initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 30 }}
+        transition={{ duration: 0.22 }}>
+
+      {/* Шапка стола сборки + возврат к готовке */}
+      <div className="relative z-10 shrink-0 flex items-center gap-2 px-2 py-1.5 bg-orange-50 border-b-2 border-orange-200">
+        <button
+          onClick={() => { haptic.medium(); setStage('cook'); }}
+          className="flex items-center gap-1 py-1.5 px-3 rounded-2xl font-black text-white text-xs shadow border-b-4 active:translate-y-0.5 active:border-b-0 bg-orange-500 border-orange-700"
+        >
+          <span className="text-base">←</span> К готовке
+        </button>
+        <div className="flex-1 text-center text-[11px] font-black text-orange-700 uppercase tracking-wide">
+          🍽️ Стол сборки
+        </div>
+        <div className="w-[88px] shrink-0" />
+      </div>
+
       {/* Assembly Zone */}
-      <div className="relative z-10 bg-white rounded-t-2xl border-t-2 border-amber-200 flex gap-2 p-2 shrink-0 shadow-inner overflow-hidden"
-        style={{ minHeight: 150 }}>
+      <div className="relative z-10 bg-white border-t-2 border-amber-200 flex gap-2 p-2 flex-1 min-h-0 shadow-inner overflow-hidden">
 
         {/* Ready items column */}
         <div className="w-16 border-r-2 border-amber-100 flex flex-col items-center gap-1 py-1 overflow-y-auto shrink-0"
@@ -891,6 +940,10 @@ export function KitchenView({
           </button>
         </div>
       </div>
+
+      </motion.div>
+      )}
+      </AnimatePresence>
 
       {/* Призрак ингредиента, который тащим пальцем */}
       {drag?.moved && (
