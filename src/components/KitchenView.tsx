@@ -455,8 +455,12 @@ export function KitchenView({
         backgroundSize: '34px 34px',
       }} />
 
-      {/* 2×2 Station Grid — гибкая высота: делит место с зоной сборки, не вылезая за экран */}
-      <div className="grid grid-cols-2 grid-rows-2 gap-1.5 p-1.5 min-h-0 relative z-10" style={{ flex: '1.9 1 0' }}>
+      {/* Прокручиваемая зона техники: станции получают полноценную высоту и
+          НИЧЕГО не обрезается — если не помещается на экран, просто прокручиваем. */}
+      <div className="relative z-10 flex-1 min-h-0 overflow-y-auto">
+      {/* 2×2 Station Grid — фиксированная комфортная высота, чтобы продукты и
+          подсказки всегда влезали целиком */}
+      <div className="grid grid-cols-2 grid-rows-2 gap-2 p-2 relative z-10 shrink-0" style={{ minHeight: 320 }}>
 
         {/* CUTTING BOARD — деревянная столешница */}
         <div className="relative rounded-2xl overflow-hidden flex flex-col border-4 border-amber-700/50 shadow-md"
@@ -639,6 +643,7 @@ export function KitchenView({
           </motion.div>
         </div>
       </div>
+      </div>{/* /прокручиваемая зона техники */}
 
       {/* Quick Pick Bar */}
       {activeRecipe ? (
@@ -694,8 +699,8 @@ export function KitchenView({
       )}
 
       {/* Assembly Zone */}
-      <div className="relative z-10 bg-white rounded-t-2xl border-t-2 border-amber-200 flex gap-2 p-2 min-h-0 shadow-inner overflow-hidden"
-        style={{ flex: '1 1 0', minHeight: 120 }}>
+      <div className="relative z-10 bg-white rounded-t-2xl border-t-2 border-amber-200 flex gap-2 p-2 shrink-0 shadow-inner overflow-hidden"
+        style={{ minHeight: 150 }}>
 
         {/* Ready items column */}
         <div className="w-16 border-r-2 border-amber-100 flex flex-col items-center gap-1 py-1 overflow-y-auto shrink-0"
